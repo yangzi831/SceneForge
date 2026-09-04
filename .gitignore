@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+secrets.yaml
+
+# Node / Vite
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Blender / large source assets
+*.blend1
+*.blend2
+*.fbx
+*.obj
+*.glb
+!/examples/*.glb
+
+# OS
+.DS_Store
+Thumbs.db
