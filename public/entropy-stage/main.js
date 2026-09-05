@@ -31,6 +31,8 @@ const ui = {
   screenBrightness: document.querySelector("#screen-brightness"),
   brightnessValue: document.querySelector("#brightness-value"),
   resetBrightness: document.querySelector("#reset-brightness"),
+  hud: document.querySelector("#hud"),
+  toggleHud: document.querySelector("#toggle-hud"),
 };
 
 const DEFAULT_SCREEN_BRIGHTNESS = 125;
@@ -38,6 +40,27 @@ const AUX_MODES = ["FLOOR", "CEILING", "OFF"];
 
 ui.room.textContent = roomId;
 ui.secure.textContent = window.isSecureContext ? "yes" : "no — screen capture will be blocked";
+
+const setHudCollapsed = (collapsed) => {
+  ui.hud.classList.toggle("hud--collapsed", collapsed);
+  ui.toggleHud.setAttribute("aria-expanded", String(!collapsed));
+  ui.toggleHud.textContent = collapsed ? "Show controls" : "Hide controls";
+  ui.toggleHud.title = collapsed ? "Show controls (H)" : "Hide controls (H)";
+};
+
+ui.toggleHud.addEventListener("click", () => {
+  setHudCollapsed(!ui.hud.classList.contains("hud--collapsed"));
+});
+
+window.addEventListener("keydown", (event) => {
+  const target = event.target;
+  const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+  if (isTyping || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.key.toLowerCase() === "h") {
+    event.preventDefault();
+    setHudCollapsed(!ui.hud.classList.contains("hud--collapsed"));
+  }
+});
 
 function setStatus(message, level = "info") {
   ui.status.textContent = message;

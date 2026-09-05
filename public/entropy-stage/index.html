@@ -10,12 +10,21 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #05070a; color: #f4f6f8; }
       needle-engine { position: fixed; inset: 0; width: 100%; height: 100%; }
-      .hud { position: fixed; z-index: 10; top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); width: min(410px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 14px; background: rgba(6,8,12,.78); backdrop-filter: blur(18px); box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+      h1 { font-size: 15px; margin: 0; letter-spacing: .01em; }
+      .hud { position: fixed; z-index: 10; top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); width: min(410px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 14px; background: rgba(6,8,12,.78); backdrop-filter: blur(18px); box-shadow: 0 18px 50px rgba(0,0,0,.28); transition: background .2s ease, border-color .2s ease, box-shadow .2s ease, padding .2s ease; }
+      .hud-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .hud-toggle { flex: 0 0 auto; min-height: 30px; padding: 5px 9px; border-radius: 8px; border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #c7ccd3; font-size: 11px; white-space: nowrap; }
+      .hud-toggle:hover { background: rgba(255,255,255,.15); }
+      .hud--collapsed { width: auto; max-height: none; overflow: visible; padding: 0; border-color: transparent; background: transparent; backdrop-filter: none; box-shadow: none; }
+      .hud--collapsed .hud-header { display: block; }
+      .hud--collapsed .hud-header h1 { display: none; }
+      .hud--collapsed .hud-toggle { min-height: 36px; padding: 8px 12px; border-color: rgba(255,255,255,.2); background: rgba(6,8,12,.78); backdrop-filter: blur(18px); box-shadow: 0 12px 30px rgba(0,0,0,.25); color: #f4f6f8; }
+      .hud-content { margin-top: 8px; }
+      .hud--collapsed .hud-content { display: none; }
       .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       .row > * { flex: 1 1 auto; }
       .meta { display: grid; grid-template-columns: 92px 1fr; gap: 5px 10px; margin: 8px 0 12px; font-size: 12px; color: #a9b0ba; }
       .meta strong { color: #eef1f4; font-weight: 600; overflow-wrap: anywhere; }
-      h1 { font-size: 15px; margin: 0; letter-spacing: .01em; }
       p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: #a9b0ba; }
       button { min-height: 38px; border-radius: 9px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #f4f6f8; padding: 8px 10px; font: inherit; cursor: pointer; }
       button:hover { background: rgba(255,255,255,.12); }
@@ -31,7 +40,7 @@
       .brightness-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
       .brightness-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: #f3f5f7; }
       .brightness-row button { flex: 0 0 auto; }
-      @media (max-width: 640px) { .hud { padding: 12px; } }
+      @media (max-width: 640px) { .hud:not(.hud--collapsed) { padding: 12px; } }
     </style>
     <script type="module" src="https://cdn.jsdelivr.net/npm/@needle-tools/engine@5.1.5/dist/needle-engine.min.js"></script>
   </head>
@@ -45,45 +54,52 @@
       autoplay
     ></needle-engine>
 
-    <section class="hud" aria-label="ENTROPY stage preview controls">
-      <h1>SceneForge · ENTROPY Stage <span class="badge">WebRTC prototype</span></h1>
-      <p>Pick a desktop window → WebRTC room → curved main LED + floor/ceiling auxiliary LED → WebXR.</p>
-      <div class="meta">
-        <span>Room</span><strong id="room-id">—</strong>
-        <span>Main LED</span><strong>15.2 m arc · 12.4 m chord · 5.5 m high</strong>
-        <span>Canvas</span><strong>9600 × 3456 · 25:9</strong>
-        <span>Aux LED</span><strong>Floor full frame · ceiling center 960 × 1080 crop</strong>
-        <span>Secure</span><strong id="secure-state">—</strong>
+    <section class="hud" id="hud" aria-label="ENTROPY stage preview controls">
+      <div class="hud-header">
+        <h1>SceneForge · ENTROPY Stage <span class="badge">WebRTC prototype</span></h1>
+        <button class="hud-toggle" id="toggle-hud" type="button" aria-controls="hud-content" aria-expanded="true">
+          Hide controls
+        </button>
       </div>
-
-      <div class="row">
-        <button class="primary" id="share-screen" type="button">Pick Window / Screen</button>
-        <button id="stop-share" type="button">Stop Share</button>
-        <button id="copy-link" type="button">Copy Room Link</button>
-      </div>
-      <div class="row">
-        <button id="view-front" type="button">Front View</button>
-        <button id="view-wide" type="button">Wide View</button>
-        <button id="view-stage" type="button">Stage View</button>
-      </div>
-      <div class="row">
-        <button id="reset-stage" type="button">Reset Stage</button>
-        <button id="aux-mode" type="button">AUX: FLOOR</button>
-      </div>
-
-      <div class="brightness-control">
-        <div class="brightness-label">
-          <label for="screen-brightness">Screen brightness</label>
-          <output id="brightness-value" for="screen-brightness">125%</output>
+      <div class="hud-content" id="hud-content">
+        <p>Pick a desktop window → WebRTC room → curved main LED + floor/ceiling auxiliary LED → WebXR.</p>
+        <div class="meta">
+          <span>Room</span><strong id="room-id">—</strong>
+          <span>Main LED</span><strong>15.2 m arc · 12.4 m chord · 5.5 m high</strong>
+          <span>Canvas</span><strong>9600 × 3456 · 25:9</strong>
+          <span>Aux LED</span><strong>Floor full frame · ceiling center 960 × 1080 crop</strong>
+          <span>Secure</span><strong id="secure-state">—</strong>
         </div>
-        <div class="brightness-row">
-          <input id="screen-brightness" type="range" min="50" max="200" step="1" value="125" />
-          <button id="reset-brightness" type="button">Reset brightness</button>
-        </div>
-      </div>
 
-      <div class="note">Auxiliary LED cycles through FLOOR, CEILING, and OFF. Ceiling geometry is an estimated 5.58 × 6.27 m rectangle derived from the supplied 35 m² area and 960:1080 content ratio.</div>
-      <div class="status" id="status" role="status" aria-live="polite">Booting ENTROPY stage preview…</div>
+        <div class="row">
+          <button class="primary" id="share-screen" type="button">Pick Window / Screen</button>
+          <button id="stop-share" type="button">Stop Share</button>
+          <button id="copy-link" type="button">Copy Room Link</button>
+        </div>
+        <div class="row">
+          <button id="view-front" type="button">Front View</button>
+          <button id="view-wide" type="button">Wide View</button>
+          <button id="view-stage" type="button">Stage View</button>
+        </div>
+        <div class="row">
+          <button id="reset-stage" type="button">Reset Stage</button>
+          <button id="aux-mode" type="button">AUX: FLOOR</button>
+        </div>
+
+        <div class="brightness-control">
+          <div class="brightness-label">
+            <label for="screen-brightness">Screen brightness</label>
+            <output id="brightness-value" for="screen-brightness">125%</output>
+          </div>
+          <div class="brightness-row">
+            <input id="screen-brightness" type="range" min="50" max="200" step="1" value="125" />
+            <button id="reset-brightness" type="button">Reset brightness</button>
+          </div>
+        </div>
+
+        <div class="note">Auxiliary LED cycles through FLOOR, CEILING, and OFF. Ceiling geometry is an estimated 5.58 × 6.27 m rectangle derived from the supplied 35 m² area and 960:1080 content ratio.</div>
+        <div class="status" id="status" role="status" aria-live="polite">Booting ENTROPY stage preview…</div>
+      </div>
     </section>
 
     <script type="module" src="./main.js"></script>
