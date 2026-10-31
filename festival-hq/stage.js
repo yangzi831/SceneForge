@@ -243,15 +243,25 @@ export function makeVenueGeometry(context) {
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const foregroundScreen = new THREE.Mesh(new THREE.PlaneGeometry(28, 8.2), foregroundMaterial);
+  // Match the inner vertices of the luminous triangular arch exactly.
+  const scrimGeometry = new THREE.BufferGeometry();
+  scrimGeometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    -17.8, 0.9, 0,
+     17.8, 0.9, 0,
+     0, 20.4, 0,
+  ], 3));
+  // The image remains in a rectangular UV space, clipped by the triangular outline.
+  scrimGeometry.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0.5, 1], 2));
+  scrimGeometry.setIndex([0, 1, 2]);
+  scrimGeometry.computeVertexNormals();
+  const foregroundScreen = new THREE.Mesh(scrimGeometry, foregroundMaterial);
   foregroundScreen.name = "TransparentForegroundScreen";
-  foregroundScreen.position.set(0, 5, 1.8);
+  foregroundScreen.position.z = 3.81;
   foregroundScreen.renderOrder = 4;
   context.scene.add(foregroundScreen);
-  // Fine frame indicates the edge of the scrim while remaining visually light.
   const scrimFrame = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.PlaneGeometry(28, 8.2)),
-    new THREE.LineBasicMaterial({ color: 0x70b5a4, transparent: true, opacity: 0.32, depthWrite: false }),
+    new THREE.EdgesGeometry(scrimGeometry),
+    new THREE.LineBasicMaterial({ color: 0x70b5a4, transparent: true, opacity: 0.22, depthWrite: false }),
   );
   foregroundScreen.add(scrimFrame);
 

@@ -153,7 +153,7 @@ function front() {
 $("front").addEventListener("click", front);
 $("wide").addEventListener("click", () => view([38, 28, 58], [0, 10, -3]));
 $("top").addEventListener("click", () => view([0, 78, -2.9], [0, 0, -3], true));
-$("performer").addEventListener("click", () => view([1.6, 2.5, 3.3], [0, 1.8, -1.8], false, 60));
+$("performer").addEventListener("click", () => view([2.5, 3.3, 9], [0, 2.1, -1.8], false, 55));
 $("orbit").addEventListener("click", () => view([0, 19.2, 3.5], [0, 16.2, -2.3], false, 85));
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); composer.setSize(innerWidth, innerHeight); });
 addEventListener("pagehide", stopMedia, { once: true });
