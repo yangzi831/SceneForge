@@ -6,6 +6,7 @@ import { SSRPass } from "three/addons/postprocessing/SSRPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { makeVenueGeometry } from "./stage.js";
+import { createShowVisual } from "./show-visual.js";
 
 const $ = (id) => document.getElementById(id);
 const viewport = $("viewport");
@@ -93,6 +94,11 @@ let texture = previewTexture;
 let stream = null;
 let video = null;
 let objectUrl = null;
+let show = null;
+let showPlaying = false;
+let showElapsed = 0;
+let showLastFrame = 0;
+let previousTime = 0;
 const ids = ["scaleX", "scaleY", "offsetX", "offsetY"];
 const defaults = { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 };
 try {
@@ -102,15 +108,18 @@ try {
 
 function applyAlignment() {
   const values = Object.fromEntries(ids.map((id) => [id, Number($(id).value)]));
-  // The same texture object and transform are shared by all three surfaces.
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.repeat.set(values.scaleX, values.scaleY);
-  texture.offset.set((1 - values.scaleX) / 2 + values.offsetX, (1 - values.scaleY) / 2 + values.offsetY);
-  texture.updateMatrix();
-  foregroundMaterial.uniforms.image.value = texture;
-  foregroundMaterial.uniforms.imageTransform.value = texture.matrix;
-  texture.needsUpdate = true;
+  // The two generated layers use the same UV adjustment and timeline.
+  const foregroundTexture = show ? show.foregroundTexture : texture;
+  for (const screenTexture of new Set([texture, foregroundTexture])) {
+    screenTexture.wrapS = THREE.ClampToEdgeWrapping;
+    screenTexture.wrapT = THREE.ClampToEdgeWrapping;
+    screenTexture.repeat.set(values.scaleX, values.scaleY);
+    screenTexture.offset.set((1 - values.scaleX) / 2 + values.offsetX, (1 - values.scaleY) / 2 + values.offsetY);
+    screenTexture.updateMatrix();
+    screenTexture.needsUpdate = true;
+  }
+  foregroundMaterial.uniforms.image.value = foregroundTexture;
+  foregroundMaterial.uniforms.imageTransform.value = foregroundTexture.matrix;
   for (const id of ids) $(`${id}Out`).textContent = values[id].toFixed(2);
   try { localStorage.setItem("sceneforge-unified-uv", JSON.stringify(values)); } catch { /* optional */ }
 }
@@ -121,7 +130,11 @@ function stopMedia() {
   if (stream) { for (const track of stream.getTracks()) { track.onended = null; track.stop(); } stream = null; }
   if (video) { video.pause(); video.srcObject = null; video.removeAttribute("src"); video.load(); video = null; }
   if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
-  if (texture !== previewTexture) texture.dispose();
+  if (show) { show.dispose(); show = null; }
+  else if (texture !== previewTexture) texture.dispose();
+  showPlaying = false;
+  $("pauseShow").disabled = true;
+  $("pauseShow").textContent = "暂停";
   texture = previewTexture;
   mainMaterial.map = texture;
   roofMaterial.map = texture;
@@ -172,6 +185,31 @@ $("file").addEventListener("change", async (event) => {
   catch (error) { stopMedia(); status.textContent = `无法播放视频：${error.message || error}`; }
   event.target.value = "";
 });
+$("playShow").addEventListener("click", () => {
+  stopMedia();
+  show = createShowVisual();
+  texture = show.texture;
+  showElapsed = 0; showLastFrame = 0; previousTime = 0; showPlaying = true;
+  show.render(0, Number($("showFlash").value));
+  mainMaterial.map = texture; roofMaterial.map = texture; roofScreen.material.map = texture;
+  mainMaterial.needsUpdate = true; roofMaterial.needsUpdate = true; roofScreen.material.needsUpdate = true;
+  $("tintVideo").checked = false;
+  applyPalette(palettes.mono, "mono");
+  applyAlignment();
+  $("pauseShow").disabled = false;
+  status.textContent = "黑白演出视觉播放中：前纱幕与后屏同步，画面持续循环。";
+});
+$("pauseShow").addEventListener("click", () => {
+  if (!show) return;
+  showPlaying = !showPlaying; previousTime = 0;
+  $("pauseShow").textContent = showPlaying ? "暂停" : "继续";
+  status.textContent = showPlaying ? "黑白演出视觉播放中。" : "黑白演出视觉已暂停。";
+});
+$("showSpeed").addEventListener("input", () => { $("showSpeedOut").textContent = `${Number($("showSpeed").value).toFixed(1)}×`; });
+$("showFlash").addEventListener("input", () => {
+  $("showFlashOut").textContent = `${Math.round(Number($("showFlash").value) * 100)}%`;
+  if (show && !showPlaying) show.render(showElapsed, Number($("showFlash").value));
+});
 $("stop").addEventListener("click", () => { stopMedia(); status.textContent = "已停止，显示示意画面。"; });
 $("scrimVisible").addEventListener("change", () => { foregroundScreen.visible = $("scrimVisible").checked; });
 for (const [id, uniform] of [["scrimOpacity", "opacity"], ["scrimKey", "keyLevel"]]) {
@@ -220,4 +258,14 @@ addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; cam
 addEventListener("pagehide", stopMedia, { once: true });
 applyAlignment();
 front();
-renderer.setAnimationLoop(() => { controls.update(); composer.render(); });
+renderer.setAnimationLoop((now) => {
+  if (show && showPlaying) {
+    if (previousTime) showElapsed += Math.min((now - previousTime) / 1000, 0.1) * Number($("showSpeed").value);
+    previousTime = now;
+    if (now - showLastFrame >= 1000 / 30) {
+      show.render(showElapsed, Number($("showFlash").value));
+      showLastFrame = now;
+    }
+  }
+  controls.update(); composer.render();
+});

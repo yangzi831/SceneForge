@@ -44,6 +44,13 @@
       <div class="row"><button type="button" class="primary" id="share">选择窗口 / 屏幕</button><label class="file">选择视频<input id="file" type="file" accept="video/*" /></label><button type="button" id="stop">停止</button></div>
       <p class="status" id="status">默认示意画面。拖动旋转视角，滚轮缩放。</p>
       <hr class="divider" />
+      <div class="label">内置演出视觉 · 黑白点线</div>
+      <p class="hint">点阵、线框和几何切片在前后屏间流动，32 秒循环。</p>
+      <div class="row"><button type="button" class="primary" id="playShow">播放黑白视觉</button><button type="button" id="pauseShow" disabled>暂停</button></div>
+      <div class="control"><label for="showSpeed">运动速度</label><input id="showSpeed" type="range" min="0.5" max="1.5" step="0.1" value="1"><output id="showSpeedOut">1.0×</output></div>
+      <div class="control"><label for="showFlash">频闪强度</label><input id="showFlash" type="range" min="0" max="1" step="0.05" value="0.55"><output id="showFlashOut">55%</output></div>
+      <p class="hint">含频闪，可将强度调至 0；该视觉不含音乐，也不会自动跟随音乐节拍。</p>
+      <hr class="divider" />
       <div class="label">舞台配色</div>
       <div class="palette">
         <button type="button" data-palette="mint" aria-pressed="true"><span class="swatch" style="--swatch:linear-gradient(120deg,#0b7664,#b4f8dc,#ecd0a4)"></span>薄荷香槟</button>
