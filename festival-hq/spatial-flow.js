@@ -6,12 +6,18 @@ export const spatialFlowGLSL = `
   uniform float flowTime;
   uniform float flowEnabled;
   uniform float flowEnergy;
+  uniform float flowFlash;
+  uniform float flowBurst;
+  uniform float flowGain;
   uniform vec3 flowColor;
   uniform mat3 flowImageTransform;
   varying vec3 stageWorldPosition;
   vec2 stagePanoramaUv(vec3 p) {
-    float azimuth = atan(p.x, (p.z + 2.5) * 1.35);
-    return vec2(fract(azimuth / 6.2831853 - flowTime * 0.055), fract((p.y - 0.5) / 12.0));
+    // A shared frontal atlas preserves complete silhouettes on the main wall
+    // and repeats the same movement on the upper tier. The orbit field below
+    // provides circulation between surfaces without warping the motif.
+    float horizontal = (p.x + 20.0) / 40.0 + sin(flowTime * 0.35) * 0.018;
+    return vec2(fract(horizontal), fract((p.y - 0.9) / 11.0));
   }
   float stageFrost(vec3 p) {
     vec2 cell = floor(p.xy * 0.9), uv = fract(p.xy * 0.9);
@@ -46,14 +52,16 @@ export const spatialFlowGLSL = `
     float crown = exp(-pow((p.y - upper) / 0.32, 2.0));
     float dots = smoothstep(0.66, 0.95, sin(angle * 73.0 + p.y * 27.0 - flowTime * 12.0));
     float dust = exp(-pow((p.y - elevation) / 1.15, 2.0)) * dots * 0.48;
-    float light = clamp((ribbon + wake + crown * 0.9 + dust) * packets, 0.0, 1.0);
-    return vec4(flowColor * (1.0 + flowEnergy * 0.5), light * flowEnabled);
+    float accentLines = pow(abs(sin(angle * 9.0 - flowTime * 11.0)), 24.0) * flowBurst;
+    float light = clamp((ribbon + wake + crown * 0.9 + dust) * packets + accentLines * 0.28, 0.0, 1.0) * flowGain;
+    return vec4(flowColor * (0.55 + flowEnergy * 0.2), light * flowEnabled);
   }
 `;
 
 export function createSpatialFlow() {
   const uniforms = {
     flowTime: { value: 0 }, flowEnabled: { value: 0 },
+    flowFlash: { value: 0 }, flowBurst: { value: 0 }, flowGain: { value: 1 },
     flowEnergy: { value: 0.4 }, flowImageTransform: { value: new THREE.Matrix3() }, flowColor: { value: new THREE.Color(0xd5f4ff) },
   };
   const attach = (material, frost = 0) => {
@@ -70,15 +78,16 @@ export function createSpatialFlow() {
         #ifdef USE_MAP
         if (flowEnabled > 0.5) {
           vec2 panoramaUv = (flowImageTransform * vec3(stagePanoramaUv(stageWorldPosition), 1.0)).xy;
-          diffuseColor.rgb = unmappedColor * texture2D(map, panoramaUv).rgb * 0.65;
+          diffuseColor.rgb = unmappedColor * texture2D(map, panoramaUv).rgb * (0.9 + flowBurst * 0.25) * flowGain;
         }
         #endif
         vec4 spatial = stageFlow(stageWorldPosition);
         diffuseColor.rgb += spatial.rgb * spatial.a;
-        diffuseColor.rgb += flowColor * stageFrost(stageWorldPosition) * ${frost.toFixed(3)};`,
+        diffuseColor.rgb *= mix(1.0, 0.78 + flowFlash * 0.22, flowEnabled);
+        diffuseColor.rgb += flowColor * stageFrost(stageWorldPosition) * ${frost.toFixed(3)} * mix(1.0, 0.25, flowEnabled);`,
       );
     };
-    material.customProgramCacheKey = () => `ice-spatial-flow-v3-${frost}`;
+    material.customProgramCacheKey = () => `ice-spatial-flow-v7-${frost}`;
     material.needsUpdate = true;
   };
   return { uniforms, attach };

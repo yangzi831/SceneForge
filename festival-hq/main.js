@@ -7,7 +7,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { makeVenueGeometry } from "./stage.js";
 import { createShowVisual } from "./show-visual.js";
-import { analyseTrack, createAudioReactor } from "./audio-analysis.js";
+import { analyseTrack, createAudioReactor, analyseAccents, sampleAccents } from "./audio-analysis.js";
 import { VISUAL_STYLES } from "./visual-styles.js";
 import { createShowDirector } from "./show-director.ts";
 
@@ -41,7 +41,7 @@ ssrPass.resolutionScale = 0.5;
 ssrPass.opacity = 0.55;
 ssrPass.maxDistance = 35;
 ssrPass.thickness = 0.15;
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.45, 0.8);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.35, 0.95);
 composer.addPass(renderPass);
 composer.addPass(ssrPass);
 composer.addPass(bloomPass);
@@ -109,6 +109,9 @@ let musicContext = null;
 let musicReactor = null;
 let musicAnalysis = { bpm: 120, beatOffset: 0, dropTime: null };
 let audioGeneration = 0;
+let accentTrack = null;
+let previousAccentTime = -1;
+const builtinMusicUrl = new URL("../festival-audio/nemesis.m4a", location.href).href;
 const paletteCycle = ["mint", "blue", "violet", "rose", "amber", "mono"];
 const director = createShowDirector(VISUAL_STYLES.map(([key]) => key), paletteCycle.length);
 let liveCue = { style: "a", paletteIndex: 1 };
@@ -174,6 +177,9 @@ $("resetUV").addEventListener("click", () => { for (const id of ids) $(id).value
 function stopMedia() {
   audioGeneration++;
   spatialFlow.uniforms.flowEnabled.value = 0;
+  spatialFlow.uniforms.flowFlash.value = 0;
+  spatialFlow.uniforms.flowBurst.value = 0;
+  accentTrack = null; previousAccentTime = -1;
   if (music) {
     const oldMusic = music; music = null;
     oldMusic.pause(); oldMusic.removeAttribute("src"); oldMusic.load(); oldMusic.remove();
@@ -259,7 +265,7 @@ function startShow(resetAutomation = true) {
   $("pauseShow").disabled = false;
   status.textContent = "碎冰舞台自动演出中：视觉、配色与环流持续变化。";
 }
-$("playShow").addEventListener("click", () => startShow());
+$("playShow").addEventListener("click", () => startMusic({ url: builtinMusicUrl, name: "nemesis", builtin: true }));
 function chooseVisualStyle(style) {
   visualStyle = style;
   $("visualAuto").setAttribute("aria-pressed", String(style === "auto"));
@@ -288,19 +294,16 @@ addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   if (VISUAL_STYLES.some(([letter]) => letter === key)) { event.preventDefault(); chooseVisualStyle(key); }
 });
-$("audioFile").addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  event.target.value = "";
+async function startMusic({ url, name, file = null, builtin = false }) {
   startShow();
   const generation = audioGeneration;
   const element = document.createElement("audio");
-  element.controls = true; element.preload = "metadata";
+  element.controls = true; element.preload = "auto"; element.loop = true;
   element.style.cssText = "width:100%;margin-top:8px";
   element.setAttribute("aria-label", "音乐播放进度");
   $("audioContainer").appendChild(element);
   music = element;
-  musicAnalysis = { bpm: 120, beatOffset: 0, dropTime: null };
+  musicAnalysis = builtin ? { bpm: 88.93, beatOffset: 0.175, dropTime: 44.43 } : { bpm: 120, beatOffset: 0, dropTime: null };
   element.addEventListener("play", () => {
     if (music !== element || !show) return;
     musicContext?.resume(); showPlaying = true; previousTime = 0;
@@ -310,29 +313,33 @@ $("audioFile").addEventListener("change", async (event) => {
     if (music !== element || !show) return;
     showPlaying = false; $("pauseShow").textContent = "继续";
   });
-  objectUrl = URL.createObjectURL(file);
-  element.src = objectUrl; element.hidden = false;
+  if (file) { objectUrl = URL.createObjectURL(file); element.src = objectUrl; }
+  else element.src = url;
   $("showSpeed").disabled = true;
   try {
-    const context = new AudioContext();
-    musicContext = context;
-    const source = context.createMediaElementSource(element);
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.25;
+    const context = new AudioContext(); musicContext = context;
+    const source = context.createMediaElementSource(element), analyser = context.createAnalyser();
+    analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.06;
     source.connect(analyser); analyser.connect(context.destination);
     musicReactor = createAudioReactor(analyser);
-    await context.resume();
-    await element.play();
-    status.textContent = `音乐同步中：${file.name}。正在分析节奏和动态转折…`;
-    const bytes = await file.arrayBuffer();
+    const resume = context.resume(), play = element.play();
+    await Promise.all([resume, play]);
+    if (generation !== audioGeneration) return;
+    status.textContent = `${name} 播放中：鼓点、重音与快速瞬态同步响应。`;
+    const bytes = file ? await file.arrayBuffer() : await fetch(url).then((response) => { if (!response.ok) throw new Error("音乐加载失败"); return response.arrayBuffer(); });
+    if (generation !== audioGeneration) return;
     const decoded = await context.decodeAudioData(bytes);
     if (generation !== audioGeneration) return;
-    musicAnalysis = analyseTrack(decoded);
-    status.textContent = `音乐同步中：${file.name} · 估算 ${Math.round(musicAnalysis.bpm)} BPM，glitch 跟随瞬态。`;
+    musicAnalysis = analyseTrack(decoded); accentTrack = analyseAccents(decoded);
+    status.textContent = `${name} · 全屏频闪、鼓点冲击、重音爆裂同步中。`;
   } catch (error) {
     if (generation !== audioGeneration) return;
-    status.textContent = `音乐未能自动播放或分析：${error.message || error}。可尝试播放器的播放键。`;
+    status.textContent = `音乐播放或分析未完成：${error.message || error}。可尝试播放器的播放键。`;
   }
+}
+$("audioFile").addEventListener("change", (event) => {
+  const file = event.target.files?.[0]; if (!file) return;
+  event.target.value = ""; startMusic({ file, name: file.name });
 });
 $("pauseShow").addEventListener("click", () => {
   if (!show) return;
@@ -345,6 +352,7 @@ $("pauseShow").addEventListener("click", () => {
   $("pauseShow").textContent = showPlaying ? "暂停" : "继续";
   status.textContent = showPlaying ? "黑白演出视觉播放中。" : "黑白演出视觉已暂停。";
 });
+$("showDensity").addEventListener("input", () => { $("showDensityOut").textContent = `${Number($("showDensity").value).toFixed(1)}×`; });
 $("showSpeed").addEventListener("input", () => { $("showSpeedOut").textContent = `${Number($("showSpeed").value).toFixed(1)}×`; });
 $("showFlash").addEventListener("input", () => {
   $("showFlashOut").textContent = `${Math.round(Number($("showFlash").value) * 100)}%`;
@@ -404,8 +412,9 @@ renderer.setAnimationLoop((now) => {
     if (music) showElapsed = music.currentTime;
     else if (previousTime) showElapsed += Math.min((now - previousTime) / 1000, 0.1) * Number($("showSpeed").value);
     previousTime = now;
-    if (now - showLastFrame >= 1000 / 30) {
-      lastAudioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample() } : null;
+    if (now - showLastFrame >= 1000 / 60) {
+      lastAudioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample(), microAccent: sampleAccents(accentTrack, showElapsed, previousAccentTime) } : null;
+      previousAccentTime = showElapsed;
       liveCue = director.update({
         time: showElapsed, bpm: music ? musicAnalysis.bpm : 120,
         beatOffset: music ? musicAnalysis.beatOffset : 0,
@@ -421,7 +430,10 @@ renderer.setAnimationLoop((now) => {
       }
       spatialFlow.uniforms.flowTime.value = showElapsed * (music ? musicAnalysis.bpm / 120 : 1);
       spatialFlow.uniforms.flowEnergy.value = lastAudioFeatures?.energy ?? 0.45;
-      show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, effectiveStyle);
+      const pulse = show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, effectiveStyle, Number($("showDensity").value));
+      spatialFlow.uniforms.flowFlash.value = pulse.flash;
+      spatialFlow.uniforms.flowBurst.value = pulse.burst;
+      spatialFlow.uniforms.flowGain.value = 1 - pulse.hush * 0.8;
       showLastFrame = now;
     }
   }

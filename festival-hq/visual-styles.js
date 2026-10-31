@@ -11,12 +11,12 @@ export const VISUAL_STYLES = [
   ["y", "光斑回声"], ["z", "能量爆发"],
 ];
 
-export function drawVisualStyle(ctx, fg, style, time, audio) {
+export function drawVisualStyle(ctx, fg, style, time, audio, lineWeight = 1) {
   const w = ctx.canvas.width, h = ctx.canvas.height, pi = Math.PI, tau = pi * 2;
   const rand = (n) => { const x = Math.sin(n * 127.1 + 13.37) * 43758.5453; return x - Math.floor(x); };
   const energy = audio ? audio.energy : 0.45, bass = audio ? audio.bass : 0.4, hit = audio ? audio.impact : 0;
   const pulse = 1 + bass * 0.16 + hit * 0.12;
-  const stroke = (c, alpha = 1, width = 1) => { c.strokeStyle = `rgba(255,255,255,${alpha})`; c.lineWidth = width; };
+  const stroke = (c, alpha = 1, width = 1) => { c.strokeStyle = `rgba(255,255,255,${alpha})`; c.lineWidth = Math.max(1.3, width * lineWeight); };
   const line = (c, x, y, x2, y2) => { c.beginPath(); c.moveTo(x,y); c.lineTo(x2,y2); c.stroke(); };
   const poly = (c, x, y, r, sides, a = 0, aspect = 0.65) => {
     c.beginPath(); for (let i = 0; i <= sides; i++) { const q = a + i*tau/sides; const px=x+Math.cos(q)*r, py=y+Math.sin(q)*r*aspect; if (!i) c.moveTo(px,py); else c.lineTo(px,py); } c.stroke();

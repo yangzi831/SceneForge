@@ -264,6 +264,7 @@ export function makeVenueGeometry(context) {
         vec4 flow = stageFlow(stageWorldPosition);
         vec3 imageColor = sampleColor.rgb * screenTint * mix(1.0, 0.55, flowEnabled);
         imageColor += flow.rgb * flow.a;
+        imageColor *= mix(1.0, 0.82 + flowFlash * 0.18, flowEnabled);
         float brightness = max(max(imageColor.r, imageColor.g), imageColor.b);
         float alpha = smoothstep(keyLevel, keyLevel + 0.12, brightness) * opacity;
         float veil = haze * (0.8 + 0.2 * sin(stageWorldPosition.x * 70.0) * sin(stageWorldPosition.y * 95.0));
