@@ -22,6 +22,12 @@
     .file input { display:none; } .label { font-size:12px; font-weight:650; color:#dcebe3; margin:12px 0 5px; }
     .control { display:grid; grid-template-columns: 65px 1fr 44px; gap:8px; align-items:center; font-size:11px; color:#b9c9c0; margin:8px 0; }
     input[type=range] { width:100%; accent-color:#8aecc6; } output { text-align:right; font-variant-numeric:tabular-nums; }
+    .palette { display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; margin:8px 0; }
+    .palette button { padding:7px 5px; line-height:1.3; display:flex; flex-direction:column; align-items:center; gap:5px; }
+    .palette button[aria-pressed="true"] { border-color:#c8ffe7; box-shadow:0 0 0 1px #c8ffe7; }
+    .swatch { display:block; width:100%; height:22px; border-radius:5px; background:var(--swatch); }
+    .custom-color { display:flex; gap:10px; align-items:center; font-size:12px; color:#d0e2d8; margin:10px 0; }
+    input[type=color] { width:40px; height:30px; padding:2px; border:1px solid #ffffff38; border-radius:6px; background:transparent; cursor:pointer; }
     .toggles { display:flex; gap:16px; font-size:12px; color:#d0e2d8; margin:8px 0; } .toggles input { accent-color:#8aecc6; }
     .status { font-size:11px; color:#99c6b1; line-height:1.5; } .hint { font-size:11px; color:#90a69c; }
     .panel.collapsed { width:auto; padding:10px; } .panel.collapsed .content, .panel.collapsed .title { display:none; }
@@ -37,6 +43,19 @@
       <p>一组画面调整同时作用于主屏、三角屏、顶屏、环屏、球屏和前纱幕。</p>
       <div class="row"><button type="button" class="primary" id="share">选择窗口 / 屏幕</button><label class="file">选择视频<input id="file" type="file" accept="video/*" /></label><button type="button" id="stop">停止</button></div>
       <p class="status" id="status">默认示意画面。拖动旋转视角，滚轮缩放。</p>
+      <hr class="divider" />
+      <div class="label">舞台配色</div>
+      <div class="palette">
+        <button type="button" data-palette="mint" aria-pressed="true"><span class="swatch" style="--swatch:linear-gradient(120deg,#0b7664,#b4f8dc,#ecd0a4)"></span>薄荷香槟</button>
+        <button type="button" data-palette="blue" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#142957,#8cbcff,#dfedff)"></span>深海冰蓝</button>
+        <button type="button" data-palette="rose" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#5a2038,#eca4b8,#f3d4bd)"></span>玫瑰暮色</button>
+        <button type="button" data-palette="amber" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#583019,#f0bb75,#fff0c9)"></span>琥珀暖金</button>
+        <button type="button" data-palette="violet" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#261a50,#b59ce9,#e8dfff)"></span>紫夜银光</button>
+        <button type="button" data-palette="mono" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#172126,#879da1,#eef7f3)"></span>冷白月光</button>
+      </div>
+      <label class="custom-color">自定义主色 <input type="color" id="customColor" value="#9af5d1"></label>
+      <div class="toggles"><label><input type="checkbox" id="tintVideo"> 同时为投屏画面染色</label></div>
+      <p class="hint">默认只改变灯光、环境和示意画面；勾选后也会给你选择的画面染色。</p>
       <hr class="divider" />
       <div class="label">统一画面 / UV 对齐</div>
       <div class="control"><label for="scaleX">水平范围</label><input id="scaleX" type="range" min="0.25" max="2" step="0.01" value="1"><output id="scaleXOut">1.00</output></div>

@@ -21,7 +21,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 viewport.appendChild(renderer.domElement);
 
-const { mainMaterial, roofMaterial, roofScreen, foregroundScreen, foregroundMaterial, footprint, previewTexture } = makeVenueGeometry({ scene });
+const { setStagePalette, mainMaterial, roofMaterial, roofScreen, foregroundScreen, foregroundMaterial, footprint, previewTexture } = makeVenueGeometry({ scene });
 const ground = scene.getObjectByName("ReflectiveGround");
 const deck = scene.getObjectByName("ReflectiveStageDeck");
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -43,6 +43,51 @@ composer.addPass(ssrPass);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 renderPass.enabled = false;
+
+const palettes = {
+  mint: { primary: "#b5fff0", halo: "#32d6ac", accent: "#ffe7b2", beam: "#f8fffc", background: "#101d1c", gradient: ["#032c2c", "#0b8a70", "#12244c", "#052425"] },
+  blue: { primary: "#abcfff", halo: "#618cff", accent: "#e2efff", beam: "#eef5ff", background: "#101728", gradient: ["#07172e", "#285795", "#18274f", "#07131f"] },
+  rose: { primary: "#f7b9cb", halo: "#da6d91", accent: "#ffe4c8", beam: "#fff3ee", background: "#25151c", gradient: ["#30121f", "#98445b", "#4d233f", "#23131d"] },
+  amber: { primary: "#ffdaa0", halo: "#ec9743", accent: "#fff0ce", beam: "#fff8e9", background: "#241a13", gradient: ["#29170b", "#a25721", "#513024", "#1f160f"] },
+  violet: { primary: "#d8c7ff", halo: "#9b7ad9", accent: "#f2eaff", beam: "#f8f4ff", background: "#191528", gradient: ["#1a1032", "#60468b", "#2c2557", "#131327"] },
+  mono: { primary: "#e3f2ee", halo: "#88a9a5", accent: "#fff7e8", beam: "#ffffff", background: "#141c1d", gradient: ["#101c1c", "#506b68", "#25363f", "#111a1c"] },
+};
+let activePalette = "mint";
+let currentPalette = palettes.mint;
+function makeCustomPalette(hex) {
+  const color = new THREE.Color(hex);
+  const blend = (other, amount) => `#${color.clone().lerp(new THREE.Color(other), amount).getHexString()}`;
+  return {
+    primary: blend("#ffffff", 0.35), halo: hex, accent: blend("#fff4df", 0.70),
+    beam: blend("#ffffff", 0.9), background: blend("#060b12", 0.92),
+    gradient: [blend("#050d14", 0.9), blend("#06151a", 0.4), blend("#121530", 0.7), blend("#020910", 0.9)],
+  };
+}
+function applyPalette(palette, selection) {
+  currentPalette = palette;
+  activePalette = selection;
+  setStagePalette(palette);
+  const tint = $("tintVideo").checked ? new THREE.Color(palette.primary).lerp(new THREE.Color(0xffffff), 0.35) : new THREE.Color(0xffffff);
+  mainMaterial.color.copy(tint);
+  roofMaterial.color.copy(tint);
+  roofScreen.material.color.copy(tint);
+  foregroundMaterial.uniforms.screenTint.value.copy(tint);
+  for (const button of document.querySelectorAll("[data-palette]")) button.setAttribute("aria-pressed", String(button.dataset.palette === selection));
+  try { localStorage.setItem("sceneforge-stage-palette", JSON.stringify({ selection, custom: $("customColor").value, tint: $("tintVideo").checked })); } catch { /* optional */ }
+}
+for (const button of document.querySelectorAll("[data-palette]")) {
+  button.addEventListener("click", () => applyPalette(palettes[button.dataset.palette], button.dataset.palette));
+}
+$("customColor").addEventListener("input", () => applyPalette(makeCustomPalette($("customColor").value), "custom"));
+$("tintVideo").addEventListener("change", () => applyPalette(currentPalette, activePalette));
+try {
+  const savedPalette = JSON.parse(localStorage.getItem("sceneforge-stage-palette") || "{}");
+  if (/^#[0-9a-f]{6}$/i.test(savedPalette.custom || "")) $("customColor").value = savedPalette.custom;
+  $("tintVideo").checked = savedPalette.tint === true;
+  if (savedPalette.selection === "custom") { activePalette = "custom"; currentPalette = makeCustomPalette($("customColor").value); }
+  else if (Object.hasOwn(palettes, savedPalette.selection)) { activePalette = savedPalette.selection; currentPalette = palettes[activePalette]; }
+} catch { /* Storage may be unavailable. */ }
+applyPalette(currentPalette, activePalette);
 
 let texture = previewTexture;
 let stream = null;

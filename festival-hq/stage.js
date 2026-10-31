@@ -61,23 +61,26 @@ export function makeVenueGeometry(context) {
   canvas.width = 2048;
   canvas.height = 1024;
   const ctx = canvas.getContext("2d");
-  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-  gradient.addColorStop(0, "#032c2c");
-  gradient.addColorStop(0.35, "#0b8a70");
-  gradient.addColorStop(0.7, "#12244c");
-  gradient.addColorStop(1, "#052425");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  for (let i = 0; i < 18; i += 1) {
-    ctx.beginPath();
-    ctx.moveTo(-100, 300 + i * 45);
-    ctx.bezierCurveTo(500, 100 + i * 50, 1300, 850 - i * 35, 2200, 150 + i * 45);
-    ctx.strokeStyle = `rgba(122, 255, 205, ${0.035 + (i % 3) * 0.015})`;
-    ctx.lineWidth = 7 + i % 5;
-    ctx.stroke();
-  }
+  // Redraw only the built-in artwork. User-provided video is never recolored here.
   const previewTexture = new THREE.CanvasTexture(canvas);
   previewTexture.colorSpace = THREE.SRGBColorSpace;
+  const drawPreviewPalette = (colors) => {
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    colors.gradient.forEach((color, i) => { gradient.addColorStop(i / (colors.gradient.length - 1), color); });
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const light = new THREE.Color(colors.primary);
+    const rgb = light.getRGB({}, THREE.SRGBColorSpace);
+    for (let i = 0; i < 18; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(-100, 300 + i * 45);
+      ctx.bezierCurveTo(500, 100 + i * 50, 1300, 850 - i * 35, 2200, 150 + i * 45);
+      ctx.strokeStyle = `rgba(${Math.round(rgb.r * 255)}, ${Math.round(rgb.g * 255)}, ${Math.round(rgb.b * 255)}, ${0.035 + (i % 3) * 0.015})`;
+      ctx.lineWidth = 7 + i % 5;
+      ctx.stroke();
+    }
+    previewTexture.needsUpdate = true;
+  };
   const mainMaterial = new THREE.MeshBasicMaterial({
     map: previewTexture,
     color: 0xffffff,
@@ -99,9 +102,10 @@ export function makeVenueGeometry(context) {
       screenPosition.getZ(rowLength + i),
     ));
   }
+  const crownMaterial = new THREE.MeshBasicMaterial({ color: 0xffe7b2 });
   const crown = new THREE.Mesh(
     new THREE.TubeGeometry(new THREE.CatmullRomCurve3(crownPoints), 200, 0.09, 6, false),
-    new THREE.MeshBasicMaterial({ color: 0xffe7b2 }),
+    crownMaterial,
   );
   mainScreen.add(crown);
 
@@ -174,9 +178,11 @@ export function makeVenueGeometry(context) {
     [[-20, 0.9], [-17.8, 0.9]], [[17.8, 0.9], [20, 0.9]],
   ];
   for (const [from, to] of outline) addStrip(from, to);
+  const archLights = [];
   for (const [x, y] of [[0, 22], [-18.8, 1.5], [18.8, 1.5]]) {
     const glow = new THREE.PointLight(0x4effc8, 18, 12, 2);
     glow.position.set(x, y, 5);
+    archLights.push(glow);
     context.scene.add(glow);
   }
 
@@ -216,6 +222,7 @@ export function makeVenueGeometry(context) {
     uniforms: {
       image: { value: previewTexture },
       imageTransform: { value: previewTexture.matrix },
+      screenTint: { value: new THREE.Color(0xffffff) },
       opacity: { value: 0.42 },
       keyLevel: { value: 0.12 },
     },
@@ -230,13 +237,14 @@ export function makeVenueGeometry(context) {
     fragmentShader: `
       uniform sampler2D image;
       uniform float opacity;
+      uniform vec3 screenTint;
       uniform float keyLevel;
       varying vec2 screenUv;
       void main() {
         vec4 sampleColor = texture2D(image, screenUv);
         float brightness = max(max(sampleColor.r, sampleColor.g), sampleColor.b);
         float alpha = smoothstep(keyLevel, keyLevel + 0.12, brightness) * opacity * sampleColor.a;
-        gl_FragColor = vec4(sampleColor.rgb, alpha);
+        gl_FragColor = vec4(sampleColor.rgb * screenTint, alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -320,6 +328,7 @@ export function makeVenueGeometry(context) {
   stage.add(deck);
 
   // Parallel arcs make the front of the stage read as a long, luminous apron.
+  const apronMaterials = [];
   for (let i = 0; i < 3; i += 1) {
     const points = [];
     for (let j = 0; j <= 80; j += 1) {
@@ -331,6 +340,7 @@ export function makeVenueGeometry(context) {
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 100, i === 0 ? 0.07 : 0.035, 6, false),
       new THREE.MeshBasicMaterial({ color: i === 0 ? 0xbaffed : 0x38cfa4, toneMapped: false }),
     );
+    apronMaterials.push(strip.material);
     stage.add(strip);
   }
   // Low, elongated rounded performance riser; it no longer reads as a box.
@@ -459,8 +469,9 @@ export function makeVenueGeometry(context) {
   for (const x of [-18, 18]) frame(0.35, 12, 0.35, x, 6, 1.5);
   frame(36.4, 0.35, 0.35, 0, 11.7, 1.5);
   frame(36.4, 0.35, 0.35, 0, 11.7, -7.5);
+  const topDotMaterial = new THREE.MeshBasicMaterial({ color: 0xb9ffe0 });
   for (let x = -16; x <= 16; x += 2) {
-    const light = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb9ffe0 }));
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), topDotMaterial);
     light.position.set(x, 11.45, 1.35);
     context.scene.add(light);
   }
@@ -505,7 +516,7 @@ export function makeVenueGeometry(context) {
   }
   // Narrow white beams fan gently outward with a soft radial falloff.
   const makeBeamMaterial = (strength) => new THREE.ShaderMaterial({
-    uniforms: { strength: { value: strength } },
+    uniforms: { strength: { value: strength }, beamColor: { value: new THREE.Color(0xffffff) } },
     vertexShader: `
       varying vec3 viewNormal;
       varying vec3 viewDirection;
@@ -520,13 +531,14 @@ export function makeVenueGeometry(context) {
     `,
     fragmentShader: `
       uniform float strength;
+      uniform vec3 beamColor;
       varying vec3 viewNormal;
       varying vec3 viewDirection;
       varying float beamHeight;
       void main() {
         float center = pow(max(dot(normalize(viewNormal), normalize(viewDirection)), 0.0), 2.0);
         float ends = smoothstep(0.0, 0.035, beamHeight) * (1.0 - smoothstep(0.965, 1.0, beamHeight));
-        gl_FragColor = vec4(vec3(1.0), center * ends * strength);
+        gl_FragColor = vec4(beamColor, center * ends * strength);
         #include <colorspace_fragment>
       }
     `,
@@ -558,8 +570,9 @@ export function makeVenueGeometry(context) {
   }
 
   // Circular overhead light rings echo the photographed roof rig.
+  const overheadRingMaterial = new THREE.MeshBasicMaterial({ color: 0x93efcb });
   for (const radius of [1.4, 2.8, 4.2]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.035, 8, 96), new THREE.MeshBasicMaterial({ color: 0x93efcb }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.035, 8, 96), overheadRingMaterial);
     ring.rotation.x = Math.PI / 2;
     ring.position.set(0, 11.25, -3);
     context.scene.add(ring);
@@ -570,7 +583,24 @@ export function makeVenueGeometry(context) {
   key.position.set(2, 7, 5);
   context.scene.add(key);
 
+  const setStagePalette = (colors) => {
+    lightCore.color.set(colors.primary);
+    lightHalo.color.set(colors.halo);
+    rimMaterial.color.set(colors.primary);
+    crownMaterial.color.set(colors.accent);
+    coolLens.color.set(colors.primary);
+    warmLens.color.set(colors.accent);
+    topDotMaterial.color.set(colors.primary);
+    overheadRingMaterial.color.set(colors.primary);
+    apronMaterials.forEach((material, i) => { material.color.set(i === 0 ? colors.primary : colors.halo); });
+    archLights.forEach((light) => { light.color.set(colors.halo); });
+    for (const material of [beamCoreMaterial, beamHazeMaterial, beamGlowMaterial]) material.uniforms.beamColor.value.set(colors.beam);
+    context.scene.background.set(colors.background);
+    drawPreviewPalette(colors);
+  };
+
   return {
+    setStagePalette,
     mainScreen,
     mainMaterial,
     roofMaterial,
