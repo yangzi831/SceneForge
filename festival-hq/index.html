@@ -51,7 +51,9 @@
       <div class="row"><button type="button" class="primary" id="playShow">播放黑白视觉</button><button type="button" id="pauseShow" disabled>暂停</button></div>
       <div class="control"><label for="showSpeed">运动速度</label><input id="showSpeed" type="range" min="0.5" max="1.5" step="0.1" value="1"><output id="showSpeedOut">1.0×</output></div>
       <div class="control"><label for="showFlash">频闪强度</label><input id="showFlash" type="range" min="0" max="1" step="0.05" value="0.55"><output id="showFlashOut">55%</output></div>
-      <p class="hint">含频闪，可将强度调至 0；该视觉不含音乐，也不会自动跟随音乐节拍。</p>
+      <div class="row"><label class="file">选择音乐并同步<input id="audioFile" type="file" accept="audio/*,.m4a" /></label></div>
+      <audio id="showAudio" controls preload="metadata" hidden style="width:100%;margin-top:8px"></audio>
+      <p class="hint">音乐只在本机播放；视觉跟随节奏细分、动态和瞬态。含频闪，强度可调至 0。</p>
       <hr class="divider" />
       <div class="label">舞台配色</div>
       <div class="palette">

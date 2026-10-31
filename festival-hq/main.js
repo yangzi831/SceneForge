@@ -7,6 +7,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { makeVenueGeometry } from "./stage.js";
 import { createShowVisual } from "./show-visual.js";
+import { analyseTrack, createAudioReactor } from "./audio-analysis.js";
 
 const $ = (id) => document.getElementById(id);
 const viewport = $("viewport");
@@ -99,6 +100,11 @@ let showPlaying = false;
 let showElapsed = 0;
 let showLastFrame = 0;
 let previousTime = 0;
+let music = null;
+let musicContext = null;
+let musicReactor = null;
+let musicAnalysis = { bpm: 120, beatOffset: 0, dropTime: null };
+let audioGeneration = 0;
 const paletteCycle = ["mint", "blue", "violet", "rose", "amber", "mono"];
 const showPalettes = ["mint", "blue", "violet", "amber"];
 let paletteTimerStart = 0;
@@ -161,6 +167,14 @@ for (const id of ids) $(id).addEventListener("input", applyAlignment);
 $("resetUV").addEventListener("click", () => { for (const id of ids) $(id).value = String(defaults[id]); applyAlignment(); });
 
 function stopMedia() {
+  audioGeneration++;
+  if (music) {
+    const oldMusic = music; music = null;
+    oldMusic.pause(); oldMusic.removeAttribute("src"); oldMusic.load(); oldMusic.hidden = true;
+  }
+  if (musicContext) { musicContext.close().catch(() => {}); musicContext = null; }
+  musicReactor = null;
+  $("showSpeed").disabled = false;
   if (stream) { for (const track of stream.getTracks()) { track.onended = null; track.stop(); } stream = null; }
   if (video) { video.pause(); video.srcObject = null; video.removeAttribute("src"); video.load(); video = null; }
   if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
@@ -219,7 +233,7 @@ $("file").addEventListener("change", async (event) => {
   catch (error) { stopMedia(); status.textContent = `无法播放视频：${error.message || error}`; }
   event.target.value = "";
 });
-$("playShow").addEventListener("click", () => {
+function startShow() {
   stopMedia();
   show = createShowVisual();
   texture = show.texture;
@@ -232,9 +246,58 @@ $("playShow").addEventListener("click", () => {
   applyAlignment();
   $("pauseShow").disabled = false;
   status.textContent = "黑白演出视觉播放中：前纱幕与后屏同步，画面持续循环。";
+}
+$("playShow").addEventListener("click", startShow);
+$("audioFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  event.target.value = "";
+  startShow();
+  const generation = audioGeneration;
+  const element = $("showAudio").cloneNode(false);
+  $("showAudio").replaceWith(element);
+  music = element;
+  musicAnalysis = { bpm: 120, beatOffset: 0, dropTime: null };
+  element.addEventListener("play", () => {
+    if (music !== element || !show) return;
+    musicContext?.resume(); showPlaying = true; previousTime = 0;
+    $("pauseShow").textContent = "暂停";
+  });
+  element.addEventListener("pause", () => {
+    if (music !== element || !show) return;
+    showPlaying = false; $("pauseShow").textContent = "继续";
+  });
+  objectUrl = URL.createObjectURL(file);
+  element.src = objectUrl; element.hidden = false;
+  $("showSpeed").disabled = true;
+  try {
+    const context = new AudioContext();
+    musicContext = context;
+    const source = context.createMediaElementSource(element);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.25;
+    source.connect(analyser); analyser.connect(context.destination);
+    musicReactor = createAudioReactor(analyser);
+    await context.resume();
+    await element.play();
+    status.textContent = `音乐同步中：${file.name}。正在分析节奏和动态转折…`;
+    const bytes = await file.arrayBuffer();
+    const decoded = await context.decodeAudioData(bytes);
+    if (generation !== audioGeneration) return;
+    musicAnalysis = analyseTrack(decoded);
+    status.textContent = `音乐同步中：${file.name} · 估算 ${Math.round(musicAnalysis.bpm)} BPM，glitch 跟随瞬态。`;
+  } catch (error) {
+    if (generation !== audioGeneration) return;
+    status.textContent = `音乐未能自动播放或分析：${error.message || error}。可尝试播放器的播放键。`;
+  }
 });
 $("pauseShow").addEventListener("click", () => {
   if (!show) return;
+  if (music) {
+    if (music.paused) music.play().catch((error) => { status.textContent = `无法继续播放：${error.message || error}`; });
+    else music.pause();
+    return;
+  }
   showPlaying = !showPlaying; previousTime = 0;
   $("pauseShow").textContent = showPlaying ? "暂停" : "继续";
   status.textContent = showPlaying ? "黑白演出视觉播放中。" : "黑白演出视觉已暂停。";
@@ -294,10 +357,12 @@ applyAlignment();
 front();
 renderer.setAnimationLoop((now) => {
   if (show && showPlaying) {
-    if (previousTime) showElapsed += Math.min((now - previousTime) / 1000, 0.1) * Number($("showSpeed").value);
+    if (music) showElapsed = music.currentTime;
+    else if (previousTime) showElapsed += Math.min((now - previousTime) / 1000, 0.1) * Number($("showSpeed").value);
     previousTime = now;
     if (now - showLastFrame >= 1000 / 30) {
-      show.render(showElapsed, Number($("showFlash").value));
+      const audioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample() } : null;
+      show.render(showElapsed, Number($("showFlash").value), audioFeatures);
       showLastFrame = now;
     }
   }

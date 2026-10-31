@@ -28,7 +28,8 @@ export function createShowVisual() {
     if (weight <= 0) return;
     ctx.save(); ctx.globalAlpha = weight; draw(); ctx.restore();
   }
-  function render(t, flashIntensity = 0.55) {
+  function render(t, flashIntensity = 0.55, audio = null) {
+    const songTime = t;
     // A 32-second cycle; every motion phase returns to its starting point.
     t = ((t % 32) + 32) % 32;
     const phase = TAU * t / 32;
@@ -39,7 +40,12 @@ export function createShowVisual() {
     weights[segment] = 1 - smooth; weights[(segment + 1) % 4] = smooth;
     const cx = W * (0.5 + 0.045 * Math.sin(phase * 2));
     const cy = H * (0.50 + 0.035 * Math.cos(phase * 3));
-    const flash = ((t * 5) % 1 < 0.14 ? 1 : 0) * flashIntensity;
+    const subdividedBeat = audio ? Math.max(3, Math.min(9, audio.bpm / 60 * 4)) : 5;
+    const rhythmPhase = ((songTime - (audio?.beatOffset || 0)) * subdividedBeat % 1 + 1) % 1;
+    const flash = (rhythmPhase < 0.14 ? 1 : 0) * flashIntensity * (audio ? 0.25 + 0.75 * audio.energy : 1);
+    const glitch = audio ? audio.impact : 0;
+    const drop = audio?.dropTime == null ? 0 : Math.max(0, 1 - Math.abs(songTime - audio.dropTime) / 1.0);
+    const hush = audio?.dropTime != null && songTime > audio.dropTime - 2 && songTime < audio.dropTime - 0.1 ? 0.65 : 0;
     const ctx = back.ctx, fg = front.ctx;
     for (const c of [ctx, fg]) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.fillStyle = "#000"; c.fillRect(0, 0, W, H); }
 
@@ -111,6 +117,26 @@ export function createShowVisual() {
     });
     if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.32})`; ctx.fillRect(0, 0, W, H); }
 
+    if (audio) {
+      // Brief horizontal displacement makes spectral transients read as glitch.
+      const strength = Math.min(1, glitch * 1.3 + drop * 0.9);
+      if (strength > 0.08) {
+        for (let i = 0; i < 10; i++) {
+          const y = Math.floor(rand(i * 93 + Math.floor(songTime * 18)) * H);
+          const h = 3 + Math.floor(rand(i * 17 + 9) * 22 * strength);
+          const shift = Math.floor((rand(i * 71 + Math.floor(songTime * 18)) - 0.5) * 220 * strength);
+          ctx.drawImage(ctx.canvas, 0, y, W, h, shift, y, W, h);
+          if (i % 3 === 0) { ctx.fillStyle = `rgba(255,255,255,${strength * 0.65})`; ctx.fillRect(rand(i + 333) * W, y, 30 + strength * 400, 2); }
+        }
+      }
+      if (hush) { ctx.fillStyle = `rgba(0,0,0,${hush})`; ctx.fillRect(0, 0, W, H); }
+      if (drop) {
+        ctx.strokeStyle = `rgba(255,255,255,${drop})`; ctx.lineWidth = 3 + 10 * drop;
+        for (let i = 0; i < 8; i++) polygon(ctx, cx, cy, 80 + i * 145 * (1.1 - drop * 0.25), 3, -Math.PI / 2 + phase * 2);
+        if (flashIntensity > 0) { ctx.fillStyle = `rgba(255,255,255,${drop * flashIntensity * 0.35})`; ctx.fillRect(0, 0, W, H); }
+      }
+    }
+
     // Near-camera outlines and particles move faster and larger than the back
     // layer, creating parallax while leaving the black scrim transparent.
     fg.strokeStyle = "#fff";
@@ -133,6 +159,14 @@ export function createShowVisual() {
     if (flash > 0) {
       fg.strokeStyle = `rgba(255,255,255,${flash * 0.8})`; fg.lineWidth = 5;
       for (let i = 0; i < 7; i++) line(fg, 0, H * (i + 1) / 8, W, H * (i + 1) / 8);
+    }
+    if (audio && (glitch > 0.08 || drop > 0)) {
+      fg.strokeStyle = `rgba(255,255,255,${Math.min(1, glitch + drop * 0.8)})`;
+      fg.lineWidth = 2 + 4 * glitch;
+      for (let i = 0; i < 7; i++) {
+        const y = rand(i * 4 + Math.floor(songTime * 15)) * H;
+        line(fg, 0, y, W * (0.2 + rand(i + 8) * 0.8), y);
+      }
     }
     back.texture.needsUpdate = true; front.texture.needsUpdate = true;
   }
