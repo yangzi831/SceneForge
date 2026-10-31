@@ -170,7 +170,7 @@ function stopMedia() {
   audioGeneration++;
   if (music) {
     const oldMusic = music; music = null;
-    oldMusic.pause(); oldMusic.removeAttribute("src"); oldMusic.load(); oldMusic.hidden = true;
+    oldMusic.pause(); oldMusic.removeAttribute("src"); oldMusic.load(); oldMusic.remove();
   }
   if (musicContext) { musicContext.close().catch(() => {}); musicContext = null; }
   musicReactor = null;
@@ -254,8 +254,11 @@ $("audioFile").addEventListener("change", async (event) => {
   event.target.value = "";
   startShow();
   const generation = audioGeneration;
-  const element = $("showAudio").cloneNode(false);
-  $("showAudio").replaceWith(element);
+  const element = document.createElement("audio");
+  element.controls = true; element.preload = "metadata";
+  element.style.cssText = "width:100%;margin-top:8px";
+  element.setAttribute("aria-label", "音乐播放进度");
+  $("audioContainer").appendChild(element);
   music = element;
   musicAnalysis = { bpm: 120, beatOffset: 0, dropTime: null };
   element.addEventListener("play", () => {
