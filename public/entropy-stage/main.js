@@ -26,6 +26,7 @@ const ui = {
   viewFront: document.querySelector("#view-front"),
   viewWide: document.querySelector("#view-wide"),
   viewStage: document.querySelector("#view-stage"),
+  viewTop: document.querySelector("#view-top"),
   resetStage: document.querySelector("#reset-stage"),
   auxMode: document.querySelector("#aux-mode"),
   screenBrightness: document.querySelector("#screen-brightness"),
@@ -67,27 +68,27 @@ function setStatus(message, level = "info") {
   ui.status.dataset.level = level;
 }
 
-function createCurvedScreenGeometry({ chord = 26, arc = 31.8, height = 10, segments = 128 } = {}) {
-  // Illustrative festival-scale arc, continuous UVs across the whole screen.
-  const theta = 2.15;
-  const radius = arc / theta;
-  const half = theta / 2;
+function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
+  // From left audience-side wing, around the recessed stage back, to right wing.
+  // The rounded corners and the back wall form one continuous screen mesh.
+  const path = new THREE.CatmullRomCurve3([
+    [-15, 0, 7.5], [-13, 0, 7.5], [-10.5, 0, 7.3],
+    [-9, 0, 6.2], [-9, 0, 4], [-9, 0, 0], [-8.7, 0, -1.5],
+    [-7, 0, -3], [-4, 0, -3.6], [0, 0, -3.8],
+    [4, 0, -3.6], [7, 0, -3], [8.7, 0, -1.5],
+    [9, 0, 0], [9, 0, 4], [9, 0, 6.2],
+    [10.5, 0, 7.3], [13, 0, 7.5], [15, 0, 7.5],
+  ].map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, "centripetal");
+  const points = path.getSpacedPoints(segments);
   const positions = [];
   const uvs = [];
   const indices = [];
-
   for (let y = 0; y <= 1; y += 1) {
-    for (let i = 0; i <= segments; i += 1) {
-      const u = i / segments;
-      const a = THREE.MathUtils.lerp(-half, half, u);
-      const x = radius * Math.sin(a);
-      // Edges are forward, centre is recessed: concave toward audience (+Z).
-      const z = radius * Math.cos(half) - radius * Math.cos(a);
-      positions.push(x, (y - 0.5) * height, z);
-      uvs.push(u, 1 - y);
-    }
+    points.forEach((point, i) => {
+      positions.push(point.x, (y - 0.5) * height, point.z);
+      uvs.push(i / segments, 1 - y);
+    });
   }
-
   for (let i = 0; i < segments; i += 1) {
     const a = i;
     const b = i + 1;
@@ -95,15 +96,11 @@ function createCurvedScreenGeometry({ chord = 26, arc = 31.8, height = 10, segme
     const d = segments + 2 + i;
     indices.push(a, c, b, b, c, d);
   }
-
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  geometry.userData.chord = chord;
-  geometry.userData.arc = arc;
-  geometry.userData.radius = radius;
   return geometry;
 }
 
@@ -160,6 +157,18 @@ function makeVenueGeometry(context) {
   roofScreen.rotation.x = Math.PI / 2;
   roofScreen.position.set(0, 11.4, -3);
   context.scene.add(roofScreen);
+  // Highlight the screen footprint from above while the roof is hidden.
+  const outlinePositions = mainScreen.geometry.attributes.position.array;
+  const footprintPoints = [];
+  for (let i = 0; i < outlinePositions.length / 2; i += 3) {
+    footprintPoints.push(new THREE.Vector3(outlinePositions[i], 11.05, outlinePositions[i + 2] - 7));
+  }
+  const footprint = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(footprintPoints),
+    new THREE.LineBasicMaterial({ color: 0x9dffe2 }),
+  );
+  footprint.visible = false;
+  context.scene.add(footprint);
 
   // Optional auxiliary surface, kept for existing screen sharing controls.
   const ceilingWidth = Math.sqrt(35 * (960 / 1080));
@@ -224,6 +233,8 @@ function makeVenueGeometry(context) {
     mainScreen,
     mainMaterial,
     roofMaterial,
+    roofScreen,
+    footprint,
     previewTexture,
     auxScreen,
     auxMaterial,
@@ -247,6 +258,8 @@ onStart((context) => {
     mainScreen,
     mainMaterial,
     roofMaterial,
+    roofScreen,
+    footprint,
     previewTexture,
     auxScreen,
     auxMaterial,
@@ -422,6 +435,8 @@ onStart((context) => {
     mainScreen.position.set(0, 5.9, -7);
     mainScreen.quaternion.identity();
     applyAuxMode();
+    roofScreen.visible = true;
+    footprint.visible = false;
     setCameraPose(context, [0, 8, 31], [0, 5.5, -3]);
     setStatus("Festival stage view reset.");
   };
@@ -456,18 +471,31 @@ onStart((context) => {
   });
 
   ui.viewFront.addEventListener("click", () => {
+    roofScreen.visible = true;
+    footprint.visible = false;
     setCameraPose(context, [0, 8, 31], [0, 5.5, -3]);
     setStatus("Front-of-house camera.");
   });
 
   ui.viewWide.addEventListener("click", () => {
+    roofScreen.visible = true;
+    footprint.visible = false;
     setCameraPose(context, [24, 17, 30], [0, 5, -3]);
     setStatus("Wide venue overview.");
   });
 
   ui.viewStage.addEventListener("click", () => {
+    roofScreen.visible = true;
+    footprint.visible = false;
     setCameraPose(context, [-10, 3, 4], [3, 6, -7]);
     setStatus("Stage-side camera.");
+  });
+
+  ui.viewTop.addEventListener("click", () => {
+    roofScreen.visible = false;
+    footprint.visible = true;
+    setCameraPose(context, [0, 78, -2.99], [0, 0, -3]);
+    setStatus("Top view: roof hidden temporarily to show the continuous screen footprint.");
   });
 
   ui.resetStage.addEventListener("click", resetStage);
