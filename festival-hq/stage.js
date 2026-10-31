@@ -345,28 +345,107 @@ export function makeVenueGeometry(context) {
   riser.position.set(0, 0.9, -3.5);
   stage.add(riser);
 
-  // A simple 1.7 m performer reference, behind the foreground scrim.
-  const performer = new THREE.Group();
-  performer.name = "PerformerScaleReference";
-  const outfit = new THREE.MeshStandardMaterial({ color: 0x28383b, roughness: 0.65, metalness: 0.12 });
+  // Five simplified 1.7 m scale references: two guitars, keys, bass and drums.
+  // They remain behind the transparent scrim and can be replaced with models later.
+  const outfit = new THREE.MeshStandardMaterial({ color: 0x52636a, roughness: 0.68, metalness: 0.1 });
   const skin = new THREE.MeshStandardMaterial({ color: 0xe3bda4, roughness: 0.8 });
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.42, 4, 12), outfit);
-  torso.position.y = 1.05;
-  performer.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), skin);
-  head.position.y = 1.58;
-  performer.add(head);
-  for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.68, 10), outfit);
-    leg.position.set(side * 0.1, 0.35, 0);
-    performer.add(leg);
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.59, 10), outfit);
-    arm.position.set(side * 0.23, 1.02, 0);
-    arm.rotation.z = side * 0.13;
-    performer.add(arm);
+  const instrumentDark = new THREE.MeshStandardMaterial({ color: 0x151d24, roughness: 0.45, metalness: 0.35 });
+  const hardware = new THREE.MeshStandardMaterial({ color: 0xa9c5bf, roughness: 0.28, metalness: 0.8 });
+  const cymbalMaterial = new THREE.MeshStandardMaterial({ color: 0xd7ad63, metalness: 0.75, roughness: 0.27 });
+  const addBox = (parent, size, position, material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+    mesh.position.set(...position);
+    parent.add(mesh);
+    return mesh;
+  };
+  const addRod = (parent, from, to, radius, material) => {
+    const a = new THREE.Vector3(...from);
+    const b = new THREE.Vector3(...to);
+    const direction = b.clone().sub(a);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, direction.length(), 10), material);
+    rod.position.copy(a.add(b).multiplyScalar(0.5));
+    rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+    parent.add(rod);
+    return rod;
+  };
+  const makePerson = (x, y, z, name, scale = 1) => {
+    const person = new THREE.Group();
+    person.name = name;
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.42, 4, 12), outfit);
+    torso.position.y = 1.05;
+    person.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), skin);
+    head.position.y = 1.58;
+    person.add(head);
+    for (const side of [-1, 1]) {
+      addRod(person, [side * 0.1, 0.68, 0], [side * 0.1, 0.04, 0], 0.065, outfit);
+      addRod(person, [side * 0.2, 1.25, 0], [side * 0.25, 0.78, 0.16], 0.055, outfit);
+    }
+    person.scale.setScalar(scale);
+    person.position.set(x, y, z);
+    stage.add(person);
+    return person;
+  };
+  const makeGuitar = (person, color, isBass = false) => {
+    const instrument = new THREE.Group();
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color, metalness: 0.45, roughness: 0.35 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), bodyMaterial);
+    body.scale.set(0.22, 0.31, 0.075);
+    instrument.add(body);
+    const waist = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), bodyMaterial);
+    waist.scale.set(0.17, 0.20, 0.07);
+    waist.position.y = 0.17;
+    instrument.add(waist);
+    const neckLength = isBass ? 0.88 : 0.7;
+    addBox(instrument, [0.075, neckLength, 0.06], [0, 0.29 + neckLength / 2, 0], hardware);
+    addBox(instrument, [0.11, 0.15, 0.07], [0, 0.34 + neckLength, 0], bodyMaterial);
+    instrument.rotation.z = -0.72;
+    instrument.position.set(0.03, 0.87, 0.27);
+    person.add(instrument);
+  };
+  const guitar1 = makePerson(-6.4, 0.9, -0.8, "GuitaristLeft");
+  const guitar2 = makePerson(-2.5, 0.9, -0.6, "GuitaristRight");
+  makePerson(3.0, 0.9, -0.8, "Keyboardist");
+  const bassist = makePerson(6.4, 0.9, -0.8, "Bassist");
+  makeGuitar(guitar1, 0xe1a45d);
+  makeGuitar(guitar2, 0x9bcfc4);
+  makeGuitar(bassist, 0xa45d5e, true);
+
+  const keyboard = new THREE.Group();
+  keyboard.name = "KeyboardAndStand";
+  keyboard.position.set(3.0, 0.9, -0.15);
+  addBox(keyboard, [1.35, 0.12, 0.42], [0, 0.91, 0], instrumentDark);
+  for (let i = 0; i < 16; i += 1) {
+    addBox(keyboard, [0.069, 0.012, 0.19], [-0.56 + i * 0.074, 0.98, 0.10], hardware);
   }
-  performer.position.set(0, 0.9, -1.8);
-  stage.add(performer);
+  addRod(keyboard, [-0.46, 0.05, 0], [0.42, 0.84, 0], 0.035, hardware);
+  addRod(keyboard, [0.46, 0.05, 0], [-0.42, 0.84, 0], 0.035, hardware);
+  stage.add(keyboard);
+
+  // A separate, visibly raised drum platform sits behind the front line.
+  const drumPlatform = addBox(stage, [4.0, 0.55, 2.8], [0, 1.175, -5.2], deckMaterial);
+  drumPlatform.name = "RaisedDrumPlatform";
+  const drumArea = new THREE.Group();
+  drumArea.name = "DrumKit";
+  drumArea.position.set(0, 1.45, -5.2);
+  const kick = new THREE.Mesh(new THREE.CylinderGeometry(0.39, 0.39, 0.43, 24), instrumentDark);
+  kick.rotation.x = Math.PI / 2;
+  kick.position.set(0, 0.40, 0.52);
+  drumArea.add(kick);
+  const kickHead = new THREE.Mesh(new THREE.CircleGeometry(0.34, 24), hardware);
+  kickHead.position.set(0, 0.40, 0.74);
+  drumArea.add(kickHead);
+  for (const x of [-0.37, 0.37]) {
+    const tom = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.23, 20), instrumentDark);
+    tom.position.set(x, 0.78, 0.25);
+    drumArea.add(tom);
+    const cymbal = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.035, 24), cymbalMaterial);
+    cymbal.position.set(x * 2.2, 1.03, 0.25);
+    drumArea.add(cymbal);
+    addRod(drumArea, [x * 2.2, 0.02, 0.25], [x * 2.2, 1.02, 0.25], 0.017, hardware);
+  }
+  stage.add(drumArea);
+  makePerson(0, 1.45, -5.75, "Drummer", 0.78);
   context.scene.add(stage);
 
   const rigMaterial = new THREE.MeshStandardMaterial({ color: 0x20272b, metalness: 0.7, roughness: 0.4 });
