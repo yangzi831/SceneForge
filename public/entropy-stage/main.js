@@ -177,6 +177,24 @@ function makeVenueGeometry(context) {
   roofScreen.rotation.x = Math.PI / 2;
   roofScreen.position.set(0, 11.4, -3);
   context.scene.add(roofScreen);
+
+  // Two LED ribbons form a tall triangular arch facing the audience (+Z).
+  // It remains a separate surface so it can show video without obscuring the stage.
+  const triangleGeometry = new THREE.BufferGeometry();
+  triangleGeometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    -20, 0.9, 3.8,  -17.8, 0.9, 3.8,
+    0, 23.0, 3.8,    0, 20.4, 3.8,
+    20, 0.9, 3.8,    17.8, 0.9, 3.8,
+  ], 3));
+  triangleGeometry.setAttribute("uv", new THREE.Float32BufferAttribute([
+    0, 0, 0.06, 0, 0.5, 1, 0.5, 0.89, 1, 0, 0.94, 0,
+  ], 2));
+  triangleGeometry.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4]);
+  triangleGeometry.computeVertexNormals();
+  const triangleScreen = new THREE.Mesh(triangleGeometry, roofMaterial);
+  triangleScreen.name = "AudienceFacingTriangleLED";
+  context.scene.add(triangleScreen);
+
   // Highlight the screen footprint from above while the roof is hidden.
   const outlinePositions = mainScreen.geometry.attributes.position.array;
   const footprintPoints = [];
@@ -268,7 +286,7 @@ function makeVenueGeometry(context) {
 function frontCameraPosition() {
   // Fit the whole wide stage on narrow screens as well as desktop displays.
   const aspect = Math.max(window.innerWidth / window.innerHeight, 0.3);
-  return [0, 8, Math.max(31, 31 * 1.5 / aspect)];
+  return [0, 13, Math.max(58, 50 * 1.5 / aspect)];
 }
 
 function setCameraPose(context, position, target) {
@@ -463,7 +481,7 @@ onStart((context) => {
     applyAuxMode();
     roofScreen.visible = true;
     footprint.visible = false;
-    setCameraPose(context, frontCameraPosition(), [0, 5.5, -3]);
+    setCameraPose(context, frontCameraPosition(), [0, 11, -3]);
     setStatus("Festival stage view reset.");
   };
 
@@ -499,14 +517,14 @@ onStart((context) => {
   ui.viewFront.addEventListener("click", () => {
     roofScreen.visible = true;
     footprint.visible = false;
-    setCameraPose(context, frontCameraPosition(), [0, 5.5, -3]);
+    setCameraPose(context, frontCameraPosition(), [0, 11, -3]);
     setStatus("Front-of-house camera.");
   });
 
   ui.viewWide.addEventListener("click", () => {
     roofScreen.visible = true;
     footprint.visible = false;
-    setCameraPose(context, [24, 17, 30], [0, 5, -3]);
+    setCameraPose(context, [31, 25, 45], [0, 10, -3]);
     setStatus("Wide venue overview.");
   });
 
@@ -555,7 +573,7 @@ onStart((context) => {
   setScreenBrightness(DEFAULT_SCREEN_BRIGHTNESS);
   resetStage();
   // Needle initializes orbit controls after onStart; restore the intended opening view.
-  window.setTimeout(() => setCameraPose(context, frontCameraPosition(), [0, 5.5, -3]), 800);
+  window.setTimeout(() => setCameraPose(context, frontCameraPosition(), [0, 11, -3]), 800);
   applyAuxMode();
   setStatus(`Ready in room ${roomId}. Use Pick Window / Screen on the source computer.`);
 });
