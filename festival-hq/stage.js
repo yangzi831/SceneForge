@@ -208,6 +208,53 @@ export function makeVenueGeometry(context) {
   });
   context.scene.add(orbitalScreens);
 
+  // Transparent foreground scrim: brightness-keyed, so black areas disappear.
+  // It sits between the audience (+Z) and the performer on the stage.
+  const foregroundMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      image: { value: previewTexture },
+      imageTransform: { value: previewTexture.matrix },
+      opacity: { value: 0.42 },
+      keyLevel: { value: 0.12 },
+    },
+    vertexShader: `
+      varying vec2 screenUv;
+      uniform mat3 imageTransform;
+      void main() {
+        screenUv = (imageTransform * vec3(uv, 1.0)).xy;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D image;
+      uniform float opacity;
+      uniform float keyLevel;
+      varying vec2 screenUv;
+      void main() {
+        vec4 sampleColor = texture2D(image, screenUv);
+        float brightness = max(max(sampleColor.r, sampleColor.g), sampleColor.b);
+        float alpha = smoothstep(keyLevel, keyLevel + 0.12, brightness) * opacity * sampleColor.a;
+        gl_FragColor = vec4(sampleColor.rgb, alpha);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const foregroundScreen = new THREE.Mesh(new THREE.PlaneGeometry(28, 8.2), foregroundMaterial);
+  foregroundScreen.name = "TransparentForegroundScreen";
+  foregroundScreen.position.set(0, 5, 1.8);
+  foregroundScreen.renderOrder = 4;
+  context.scene.add(foregroundScreen);
+  // Fine frame indicates the edge of the scrim while remaining visually light.
+  const scrimFrame = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.PlaneGeometry(28, 8.2)),
+    new THREE.LineBasicMaterial({ color: 0x70b5a4, transparent: true, opacity: 0.32, depthWrite: false }),
+  );
+  foregroundScreen.add(scrimFrame);
+
   // Highlight the screen footprint from above while the roof is hidden.
   const outlinePositions = mainScreen.geometry.attributes.position.array;
   const footprintPoints = [];
@@ -234,6 +281,8 @@ export function makeVenueGeometry(context) {
   });
   const auxScreen = new THREE.Mesh(floorAuxGeometry, auxMaterial);
   auxScreen.name = "EntropyAuxiliaryLED";
+  // No auxiliary input is active in this preview; do not cover the stage with an empty white plane.
+  auxScreen.visible = false;
   auxScreen.rotation.x = -Math.PI / 2;
   auxScreen.position.set(0, 0.94, -1.2);
   auxScreen.renderOrder = 2;
@@ -285,6 +334,29 @@ export function makeVenueGeometry(context) {
   riser.rotation.x = -Math.PI / 2;
   riser.position.set(0, 0.9, -3.5);
   stage.add(riser);
+
+  // A simple 1.7 m performer reference, behind the foreground scrim.
+  const performer = new THREE.Group();
+  performer.name = "PerformerScaleReference";
+  const outfit = new THREE.MeshStandardMaterial({ color: 0x28383b, roughness: 0.65, metalness: 0.12 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xe3bda4, roughness: 0.8 });
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.42, 4, 12), outfit);
+  torso.position.y = 1.05;
+  performer.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), skin);
+  head.position.y = 1.58;
+  performer.add(head);
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.68, 10), outfit);
+    leg.position.set(side * 0.1, 0.35, 0);
+    performer.add(leg);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.59, 10), outfit);
+    arm.position.set(side * 0.23, 1.02, 0);
+    arm.rotation.z = side * 0.13;
+    performer.add(arm);
+  }
+  performer.position.set(0, 0.9, -1.8);
+  stage.add(performer);
   context.scene.add(stage);
 
   const rigMaterial = new THREE.MeshStandardMaterial({ color: 0x20272b, metalness: 0.7, roughness: 0.4 });
@@ -372,6 +444,8 @@ export function makeVenueGeometry(context) {
     mainMaterial,
     roofMaterial,
     roofScreen,
+    foregroundScreen,
+    foregroundMaterial,
     footprint,
     previewTexture,
     auxScreen,

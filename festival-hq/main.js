@@ -21,12 +21,12 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 viewport.appendChild(renderer.domElement);
 
-const { mainMaterial, roofMaterial, roofScreen, footprint, previewTexture } = makeVenueGeometry({ scene });
+const { mainMaterial, roofMaterial, roofScreen, foregroundScreen, foregroundMaterial, footprint, previewTexture } = makeVenueGeometry({ scene });
 const ground = scene.getObjectByName("ReflectiveGround");
 const deck = scene.getObjectByName("ReflectiveStageDeck");
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.minDistance = 8;
+controls.minDistance = 2;
 controls.maxDistance = 180;
 controls.maxPolarAngle = Math.PI / 2 - 0.025;
 
@@ -62,6 +62,9 @@ function applyAlignment() {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.repeat.set(values.scaleX, values.scaleY);
   texture.offset.set((1 - values.scaleX) / 2 + values.offsetX, (1 - values.scaleY) / 2 + values.offsetY);
+  texture.updateMatrix();
+  foregroundMaterial.uniforms.image.value = texture;
+  foregroundMaterial.uniforms.imageTransform.value = texture.matrix;
   texture.needsUpdate = true;
   for (const id of ids) $(`${id}Out`).textContent = values[id].toFixed(2);
   try { localStorage.setItem("sceneforge-unified-uv", JSON.stringify(values)); } catch { /* optional */ }
@@ -121,6 +124,14 @@ $("file").addEventListener("change", async (event) => {
   event.target.value = "";
 });
 $("stop").addEventListener("click", () => { stopMedia(); status.textContent = "已停止，显示示意画面。"; });
+$("scrimVisible").addEventListener("change", () => { foregroundScreen.visible = $("scrimVisible").checked; });
+for (const [id, uniform] of [["scrimOpacity", "opacity"], ["scrimKey", "keyLevel"]]) {
+  $(id).addEventListener("input", () => {
+    const value = Number($(id).value);
+    foregroundMaterial.uniforms[uniform].value = value;
+    $(`${id}Out`).textContent = value.toFixed(2);
+  });
+}
 $("ssr").addEventListener("change", () => { ssrPass.enabled = $("ssr").checked; renderPass.enabled = !ssrPass.enabled; });
 $("bloom").addEventListener("change", () => { bloomPass.enabled = $("bloom").checked; });
 $("bloomStrength").addEventListener("input", () => { bloomPass.strength = Number($("bloomStrength").value); $("bloomStrengthOut").textContent = bloomPass.strength.toFixed(2); });
@@ -142,6 +153,7 @@ function front() {
 $("front").addEventListener("click", front);
 $("wide").addEventListener("click", () => view([38, 28, 58], [0, 10, -3]));
 $("top").addEventListener("click", () => view([0, 78, -2.9], [0, 0, -3], true));
+$("performer").addEventListener("click", () => view([1.6, 2.5, 3.3], [0, 1.8, -1.8], false, 60));
 $("orbit").addEventListener("click", () => view([0, 19.2, 3.5], [0, 16.2, -2.3], false, 85));
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); composer.setSize(innerWidth, innerHeight); });
 addEventListener("pagehide", stopMedia, { once: true });
