@@ -460,6 +460,19 @@ export function makeVenueGeometry(context) {
   makePerson(0, 1.45, -5.75, "Drummer", 0.78);
   context.scene.add(stage);
 
+  // Soft front/top washes make the five musicians legible without drawing
+  // visible light cones. A separate wash reaches the raised drummer.
+  const addPerformerWash = (position, targetPosition, intensity, angle) => {
+    const light = new THREE.SpotLight(0xfff3e7, intensity, 18, angle, 0.85, 2);
+    light.position.set(...position);
+    light.target.position.set(...targetPosition);
+    context.scene.add(light, light.target);
+  };
+  for (const x of [-5, 0, 5]) {
+    addPerformerWash([x, 7, 3.2], [x, 1.7, -0.8], 125, 0.52);
+  }
+  addPerformerWash([0, 6.4, -2], [0, 2.0, -5.2], 90, 0.48);
+
   const rigMaterial = new THREE.MeshStandardMaterial({ color: 0x20272b, metalness: 0.7, roughness: 0.4 });
   const frame = (w, h, d, x, y, z) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rigMaterial);
