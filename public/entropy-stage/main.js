@@ -333,6 +333,59 @@ function makeVenueGeometry(context) {
     light.position.set(x, 11.45, 1.35);
     context.scene.add(light);
   }
+  // Lighting composition: alternating warm and cool fixtures on the top truss,
+  // segmented vertical side towers, and a restrained fan of haze-like beams.
+  const lightHousing = new THREE.MeshStandardMaterial({ color: 0x10171a, metalness: 0.65, roughness: 0.42 });
+  const coolLens = new THREE.MeshBasicMaterial({ color: 0xb8ffed, toneMapped: false });
+  const warmLens = new THREE.MeshBasicMaterial({ color: 0xffd18b, toneMapped: false });
+  const fixtureBodyGeometry = new THREE.CylinderGeometry(0.21, 0.27, 0.38, 12);
+  const lensGeometry = new THREE.SphereGeometry(0.14, 12, 8);
+  for (let i = 0; i < 13; i += 1) {
+    const x = (i - 6) * 2.55;
+    const body = new THREE.Mesh(fixtureBodyGeometry, lightHousing);
+    body.position.set(x, 11.15, 1.2);
+    context.scene.add(body);
+    const lens = new THREE.Mesh(lensGeometry, i % 3 === 0 ? warmLens : coolLens);
+    lens.position.set(x, 10.91, 1.3);
+    context.scene.add(lens);
+  }
+  // Side towers frame the screens without placing bars across the video surface.
+  const verticalBarGeometry = new THREE.BoxGeometry(0.13, 0.85, 0.16);
+  for (const side of [-1, 1]) {
+    for (let col = 0; col < 2; col += 1) {
+      for (let row = 0; row < 8; row += 1) {
+        const bar = new THREE.Mesh(verticalBarGeometry, (row + col) % 4 === 0 ? warmLens : coolLens);
+        bar.position.set(side * (18.4 + col * 0.45), 1.6 + row * 1.1, 1.25);
+        context.scene.add(bar);
+      }
+    }
+  }
+  // Small footlights define the apron and make its width readable from the audience.
+  for (let i = 0; i < 15; i += 1) {
+    const x = (i - 7) * 2.25;
+    const z = 4.1 + 1.1 * (1 - (x / 17.3) ** 2);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.24), lightHousing);
+    body.position.set(x, 1.04, z - 0.3);
+    stage.add(body);
+    const lens = new THREE.Mesh(lensGeometry, i % 4 === 0 ? warmLens : coolLens);
+    lens.scale.set(0.65, 0.65, 0.65);
+    lens.position.set(x, 1.12, z - 0.14);
+    stage.add(lens);
+  }
+  // Translucent cones suggest beams in haze, not physically simulated light.
+  const beamCool = new THREE.MeshBasicMaterial({ color: 0x6effdc, transparent: true, opacity: 0.045, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  const beamWarm = new THREE.MeshBasicMaterial({ color: 0xffc782, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  for (let i = -3; i <= 3; i += 1) {
+    const source = new THREE.Vector3(i * 3.4, 10.9, 1.1);
+    const target = new THREE.Vector3(i * 4.6, 0.96, 1.8);
+    const axis = source.clone().sub(target);
+    const beam = new THREE.Mesh(new THREE.ConeGeometry(1.4, axis.length(), 24, 1, true), i % 3 === 0 ? beamWarm : beamCool);
+    beam.position.copy(source.clone().add(target).multiplyScalar(0.5));
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.normalize());
+    beam.renderOrder = 3;
+    context.scene.add(beam);
+  }
+
   // Circular overhead light rings echo the photographed roof rig.
   for (const radius of [1.4, 2.8, 4.2]) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.035, 8, 96), new THREE.MeshBasicMaterial({ color: 0x93efcb }));
