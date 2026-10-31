@@ -79,7 +79,7 @@ function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
     [2.5, 0, -3.5], [4.7, 0, -3.0], [5.7, 0, -1.9], [6.5, 0, 0.5],
     [7.2, 0, 3.4], [8, 0, 5.9], [9, 0, 6.9], [11, 0, 7.5],
     [13, 0, 7.5], [15, 0, 7.0],
-  ].map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, "centripetal");
+  ].map(([x, y, z]) => new THREE.Vector3(x * 1.18, y, 2 + (z - 2) * 0.55)), false, "centripetal");
   const points = path.getSpacedPoints(segments);
   const positions = [];
   const uvs = [];
@@ -87,7 +87,7 @@ function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
   for (let y = 0; y <= 1; y += 1) {
     points.forEach((point, i) => {
       // The central rear screen is lower than the tall side wings, as in the reference.
-      const centreDip = 1.1 * (1 - THREE.MathUtils.smoothstep(Math.abs(point.x), 4.5, 8));
+      const centreDip = 1.1 * (1 - THREE.MathUtils.smoothstep(Math.abs(point.x), 5.3, 9.4));
       const vertical = y === 0 ? -height / 2 : height / 2 - centreDip;
       positions.push(point.x, vertical, point.z);
       uvs.push(i / segments, 1 - y);
@@ -172,7 +172,7 @@ function makeVenueGeometry(context) {
 
   // Overhead LED is a permanent surface; the auxiliary floor control remains separate.
   const roofMaterial = new THREE.MeshBasicMaterial({ map: previewTexture, color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
-  const roofScreen = new THREE.Mesh(new THREE.PlaneGeometry(24, 10), roofMaterial);
+  const roofScreen = new THREE.Mesh(new THREE.PlaneGeometry(32, 8), roofMaterial);
   roofScreen.name = "FestivalOverheadLED";
   roofScreen.rotation.x = Math.PI / 2;
   roofScreen.position.set(0, 11.4, -3);
@@ -277,14 +277,45 @@ function makeVenueGeometry(context) {
   // Festival platform and rigging are visual estimates from the reference photographs.
   const stage = new THREE.Group();
   const deckMaterial = new THREE.MeshStandardMaterial({ color: 0x252b2d, roughness: 0.68, metalness: 0.25 });
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(29, 0.9, 15), deckMaterial);
-  deck.position.set(0, 0.45, -4.2);
+  // Broad, shallow apron with a gently curved audience-facing edge.
+  const deckShape = new THREE.Shape();
+  deckShape.moveTo(-18.5, 9.5);
+  deckShape.lineTo(18.5, 9.5);
+  deckShape.lineTo(18.5, -2);
+  deckShape.quadraticCurveTo(18.5, -3.5, 16, -4.2);
+  deckShape.quadraticCurveTo(0, -6.4, -16, -4.2);
+  deckShape.quadraticCurveTo(-18.5, -3.5, -18.5, -2);
+  deckShape.closePath();
+  const deck = new THREE.Mesh(new THREE.ExtrudeGeometry(deckShape, { depth: 0.9, bevelEnabled: false, curveSegments: 32 }), deckMaterial);
+  deck.rotation.x = -Math.PI / 2;
   stage.add(deck);
-  const fascia = new THREE.Mesh(new THREE.BoxGeometry(29, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0x8ae8c5 }));
-  fascia.position.set(0, 0.92, 2.35);
-  stage.add(fascia);
-  const riser = new THREE.Mesh(new THREE.BoxGeometry(8, 0.55, 2.6), deckMaterial);
-  riser.position.set(0, 1.175, -4.6);
+
+  // Parallel arcs make the front of the stage read as a long, luminous apron.
+  for (let i = 0; i < 3; i += 1) {
+    const points = [];
+    for (let j = 0; j <= 80; j += 1) {
+      const x = -17.3 + 34.6 * j / 80;
+      const z = 4.1 + 1.1 * (1 - (x / 17.3) ** 2) - i * 0.5;
+      points.push(new THREE.Vector3(x, 0.93 + i * 0.015, z));
+    }
+    const strip = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 100, i === 0 ? 0.07 : 0.035, 6, false),
+      new THREE.MeshBasicMaterial({ color: i === 0 ? 0xbaffed : 0x38cfa4, toneMapped: false }),
+    );
+    stage.add(strip);
+  }
+  // Low, elongated rounded performance riser; it no longer reads as a box.
+  const riserShape = new THREE.Shape();
+  riserShape.moveTo(-9.5, -0.8);
+  riserShape.lineTo(9.5, -0.8);
+  riserShape.quadraticCurveTo(10.4, -0.8, 10.4, 0);
+  riserShape.quadraticCurveTo(10.4, 0.8, 9.5, 0.8);
+  riserShape.lineTo(-9.5, 0.8);
+  riserShape.quadraticCurveTo(-10.4, 0.8, -10.4, 0);
+  riserShape.quadraticCurveTo(-10.4, -0.8, -9.5, -0.8);
+  const riser = new THREE.Mesh(new THREE.ExtrudeGeometry(riserShape, { depth: 0.28, bevelEnabled: false, curveSegments: 12 }), deckMaterial);
+  riser.rotation.x = -Math.PI / 2;
+  riser.position.set(0, 0.9, -3.5);
   stage.add(riser);
   context.scene.add(stage);
 
@@ -294,10 +325,10 @@ function makeVenueGeometry(context) {
     mesh.position.set(x, y, z);
     context.scene.add(mesh);
   };
-  for (const x of [-14, 14]) frame(0.35, 12, 0.35, x, 6, 1.5);
-  frame(28.4, 0.35, 0.35, 0, 11.7, 1.5);
-  frame(28.4, 0.35, 0.35, 0, 11.7, -7.5);
-  for (let x = -12; x <= 12; x += 2) {
+  for (const x of [-18, 18]) frame(0.35, 12, 0.35, x, 6, 1.5);
+  frame(36.4, 0.35, 0.35, 0, 11.7, 1.5);
+  frame(36.4, 0.35, 0.35, 0, 11.7, -7.5);
+  for (let x = -16; x <= 16; x += 2) {
     const light = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb9ffe0 }));
     light.position.set(x, 11.45, 1.35);
     context.scene.add(light);
