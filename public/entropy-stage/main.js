@@ -72,12 +72,13 @@ function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
   // From left audience-side wing, around the recessed stage back, to right wing.
   // The rounded corners and the back wall form one continuous screen mesh.
   const path = new THREE.CatmullRomCurve3([
-    [-15, 0, 7.5], [-13, 0, 7.5], [-10.5, 0, 7.3],
-    [-9, 0, 6.2], [-9, 0, 4], [-9, 0, 0], [-8.7, 0, -1.5],
-    [-7, 0, -3], [-4, 0, -3.6], [0, 0, -3.8],
-    [4, 0, -3.6], [7, 0, -3], [8.7, 0, -1.5],
-    [9, 0, 0], [9, 0, 4], [9, 0, 6.2],
-    [10.5, 0, 7.3], [13, 0, 7.5], [15, 0, 7.5],
+    // Broad audience-facing side wings; their inner edges sweep back to the centre.
+    [-15, 0, 7.0], [-13, 0, 7.5], [-11, 0, 7.5], [-9, 0, 6.9],
+    [-8, 0, 5.9], [-7.2, 0, 3.4], [-6.5, 0, 0.5], [-5.7, 0, -1.9],
+    [-4.7, 0, -3.0], [-2.5, 0, -3.5], [0, 0, -3.6],
+    [2.5, 0, -3.5], [4.7, 0, -3.0], [5.7, 0, -1.9], [6.5, 0, 0.5],
+    [7.2, 0, 3.4], [8, 0, 5.9], [9, 0, 6.9], [11, 0, 7.5],
+    [13, 0, 7.5], [15, 0, 7.0],
   ].map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, "centripetal");
   const points = path.getSpacedPoints(segments);
   const positions = [];
@@ -85,7 +86,10 @@ function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
   const indices = [];
   for (let y = 0; y <= 1; y += 1) {
     points.forEach((point, i) => {
-      positions.push(point.x, (y - 0.5) * height, point.z);
+      // The central rear screen is lower than the tall side wings, as in the reference.
+      const centreDip = 1.1 * (1 - THREE.MathUtils.smoothstep(Math.abs(point.x), 4.5, 8));
+      const vertical = y === 0 ? -height / 2 : height / 2 - centreDip;
+      positions.push(point.x, vertical, point.z);
       uvs.push(i / segments, 1 - y);
     });
   }
@@ -149,6 +153,22 @@ function makeVenueGeometry(context) {
   mainScreen.name = "EntropyMainCurvedLED";
   mainScreen.position.set(0, 5.9, -7);
   context.scene.add(mainScreen);
+
+  // A slim warm edge follows the continuous, stepped crown of the screens.
+  const screenPosition = mainScreen.geometry.attributes.position;
+  const crownPoints = [];
+  const rowLength = screenPosition.count / 2;
+  for (let i = 0; i < rowLength; i += 1) {
+    crownPoints.push(new THREE.Vector3(
+      screenPosition.getX(rowLength + i), screenPosition.getY(rowLength + i) + 0.06,
+      screenPosition.getZ(rowLength + i),
+    ));
+  }
+  const crown = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(crownPoints), 200, 0.09, 6, false),
+    new THREE.MeshBasicMaterial({ color: 0xffe7b2 }),
+  );
+  mainScreen.add(crown);
 
   // Overhead LED is a permanent surface; the auxiliary floor control remains separate.
   const roofMaterial = new THREE.MeshBasicMaterial({ map: previewTexture, color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
@@ -243,6 +263,12 @@ function makeVenueGeometry(context) {
     grid,
     stage,
   };
+}
+
+function frontCameraPosition() {
+  // Fit the whole wide stage on narrow screens as well as desktop displays.
+  const aspect = Math.max(window.innerWidth / window.innerHeight, 0.3);
+  return [0, 8, Math.max(31, 31 * 1.5 / aspect)];
 }
 
 function setCameraPose(context, position, target) {
@@ -437,7 +463,7 @@ onStart((context) => {
     applyAuxMode();
     roofScreen.visible = true;
     footprint.visible = false;
-    setCameraPose(context, [0, 8, 31], [0, 5.5, -3]);
+    setCameraPose(context, frontCameraPosition(), [0, 5.5, -3]);
     setStatus("Festival stage view reset.");
   };
 
@@ -473,7 +499,7 @@ onStart((context) => {
   ui.viewFront.addEventListener("click", () => {
     roofScreen.visible = true;
     footprint.visible = false;
-    setCameraPose(context, [0, 8, 31], [0, 5.5, -3]);
+    setCameraPose(context, frontCameraPosition(), [0, 5.5, -3]);
     setStatus("Front-of-house camera.");
   });
 
@@ -529,7 +555,7 @@ onStart((context) => {
   setScreenBrightness(DEFAULT_SCREEN_BRIGHTNESS);
   resetStage();
   // Needle initializes orbit controls after onStart; restore the intended opening view.
-  window.setTimeout(() => setCameraPose(context, [0, 8, 31], [0, 5.5, -3]), 800);
+  window.setTimeout(() => setCameraPose(context, frontCameraPosition(), [0, 5.5, -3]), 800);
   applyAuxMode();
   setStatus(`Ready in room ${roomId}. Use Pick Window / Screen on the source computer.`);
 });
