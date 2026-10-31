@@ -454,17 +454,19 @@ export function makeVenueGeometry(context) {
     depthWrite: false,
     toneMapped: false,
   });
-  const beamCoreMaterial = makeBeamMaterial(0.30);
-  const beamHazeMaterial = makeBeamMaterial(0.06);
-  const beamCoreGeometry = new THREE.CylinderGeometry(0.045, 0.045, 9.7, 20, 1, true);
-  const beamHazeGeometry = new THREE.CylinderGeometry(0.19, 0.19, 9.7, 24, 1, true);
+  const beamCoreMaterial = makeBeamMaterial(0.48);
+  const beamHazeMaterial = makeBeamMaterial(0.16);
+  const beamGlowMaterial = makeBeamMaterial(0.085);
+  const beamCoreGeometry = new THREE.CylinderGeometry(0.065, 0.065, 9.7, 20, 1, true);
+  const beamHazeGeometry = new THREE.CylinderGeometry(0.24, 0.24, 9.7, 24, 1, true);
+  const beamGlowGeometry = new THREE.CylinderGeometry(0.65, 0.65, 9.7, 32, 1, true);
   for (let i = -4; i <= 4; i += 1) {
     const top = new THREE.Vector3(i * 2.9, 10.8, 1.1);
     const bottom = new THREE.Vector3(i * 3.25, 1.1, 1.1);
     const direction = top.clone().sub(bottom);
     const length = direction.length();
     const midpoint = top.clone().add(bottom).multiplyScalar(0.5);
-    for (const [geometry, material] of [[beamHazeGeometry, beamHazeMaterial], [beamCoreGeometry, beamCoreMaterial]]) {
+    for (const [geometry, material] of [[beamGlowGeometry, beamGlowMaterial], [beamHazeGeometry, beamHazeMaterial], [beamCoreGeometry, beamCoreMaterial]]) {
       const beam = new THREE.Mesh(geometry, material);
       beam.position.copy(midpoint);
       beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
