@@ -107,7 +107,9 @@ export function makeVenueGeometry(context) {
 
   // Overhead LED is a permanent surface; the auxiliary floor control remains separate.
   const roofMaterial = new THREE.MeshBasicMaterial({ map: previewTexture, color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
-  const roofScreen = new THREE.Mesh(new THREE.PlaneGeometry(32, 8), roofMaterial);
+  // A separate material lets the ceiling fade without changing the triangle or orbital screens.
+  const ceilingMaterial = roofMaterial.clone();
+  const roofScreen = new THREE.Mesh(new THREE.PlaneGeometry(32, 8), ceilingMaterial);
   roofScreen.name = "FestivalOverheadLED";
   roofScreen.rotation.x = Math.PI / 2;
   roofScreen.position.set(0, 11.4, -3);

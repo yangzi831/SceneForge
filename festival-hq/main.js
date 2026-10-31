@@ -80,8 +80,10 @@ function stopMedia() {
   texture = previewTexture;
   mainMaterial.map = texture;
   roofMaterial.map = texture;
+  roofScreen.material.map = texture;
   mainMaterial.needsUpdate = true;
   roofMaterial.needsUpdate = true;
+  roofScreen.material.needsUpdate = true;
   applyAlignment();
 }
 function setVideoTexture(element) {
@@ -90,8 +92,10 @@ function setVideoTexture(element) {
   texture.colorSpace = THREE.SRGBColorSpace;
   mainMaterial.map = texture;
   roofMaterial.map = texture;
+  roofScreen.material.map = texture;
   mainMaterial.needsUpdate = true;
   roofMaterial.needsUpdate = true;
+  roofScreen.material.needsUpdate = true;
   applyAlignment();
 }
 $("share").addEventListener("click", async () => {
@@ -132,6 +136,18 @@ for (const [id, uniform] of [["scrimOpacity", "opacity"], ["scrimKey", "keyLevel
     $(`${id}Out`).textContent = value.toFixed(2);
   });
 }
+$("roofTransparency").addEventListener("input", () => {
+  const transparency = Number($("roofTransparency").value);
+  const material = roofScreen.material;
+  const translucent = transparency > 0;
+  if (material.transparent !== translucent) {
+    material.transparent = translucent;
+    material.depthWrite = !translucent;
+    material.needsUpdate = true;
+  }
+  material.opacity = 1 - transparency / 100;
+  $("roofTransparencyOut").textContent = `${transparency}%`;
+});
 $("ssr").addEventListener("change", () => { ssrPass.enabled = $("ssr").checked; renderPass.enabled = !ssrPass.enabled; });
 $("bloom").addEventListener("change", () => { bloomPass.enabled = $("bloom").checked; });
 $("bloomStrength").addEventListener("input", () => { bloomPass.strength = Number($("bloomStrength").value); $("bloomStrengthOut").textContent = bloomPass.strength.toFixed(2); });
