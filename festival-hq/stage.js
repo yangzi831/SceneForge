@@ -178,6 +178,36 @@ export function makeVenueGeometry(context) {
     context.scene.add(glow);
   }
 
+  // Hanging orbital screens: each narrow cylindrical LED ribbon has its own UVs,
+  // while all ribbons and the sphere use the same material/texture transform.
+  const orbitalScreens = new THREE.Group();
+  orbitalScreens.name = "HangingOrbitalScreens";
+  orbitalScreens.position.set(0, 16.2, -2.3);
+  const sphereScreen = new THREE.Mesh(new THREE.SphereGeometry(1.65, 64, 40), roofMaterial);
+  sphereScreen.name = "OrbitalSphereLED";
+  orbitalScreens.add(sphereScreen);
+  const rimMaterial = new THREE.MeshBasicMaterial({ color: 0xb3ffe4, toneMapped: false });
+  const orientations = [
+    [Math.PI * 0.28, 0.18, -0.45],
+    [Math.PI * 0.34, -0.3, 0.55],
+    [Math.PI * 0.48, 0.2, 0.04],
+  ];
+  orientations.forEach(([x, y, z], i) => {
+    const ring = new THREE.Group();
+    ring.name = `OrbitalRibbonLED-${i + 1}`;
+    ring.rotation.set(x, y, z);
+    const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(4.25, 4.25, 0.38, 128, 1, true), roofMaterial);
+    ring.add(ribbon);
+    for (const edgeY of [-0.21, 0.21]) {
+      const edge = new THREE.Mesh(new THREE.TorusGeometry(4.25, 0.035, 8, 128), rimMaterial);
+      edge.rotation.x = Math.PI / 2;
+      edge.position.y = edgeY;
+      ring.add(edge);
+    }
+    orbitalScreens.add(ring);
+  });
+  context.scene.add(orbitalScreens);
+
   // Highlight the screen footprint from above while the roof is hidden.
   const outlinePositions = mainScreen.geometry.attributes.position.array;
   const footprintPoints = [];

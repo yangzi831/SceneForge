@@ -34,7 +34,7 @@
   <section class="panel" id="panel">
     <div class="header"><div class="title"><span class="eyebrow">SCENEFORGE / THREE.JS</span><h1>音乐节舞台 · 画质预览</h1></div><button type="button" id="collapse" style="flex:none">收起</button></div>
     <div class="content">
-      <p>一组画面调整同时作用于主屏、三角屏和顶屏。</p>
+      <p>一组画面调整同时作用于主屏、三角屏、顶屏、环形屏和球屏。</p>
       <div class="row"><button type="button" class="primary" id="share">选择窗口 / 屏幕</button><label class="file">选择视频<input id="file" type="file" accept="video/*" /></label><button type="button" id="stop">停止</button></div>
       <p class="status" id="status">默认示意画面。拖动旋转视角，滚轮缩放。</p>
       <hr class="divider" />
@@ -48,7 +48,7 @@
       <hr class="divider" />
       <div class="label">画面效果</div><div class="toggles"><label><input type="checkbox" id="ssr" checked> 地面反射</label><label><input type="checkbox" id="bloom" checked> Bloom 柔光</label></div>
       <div class="control"><label for="bloomStrength">柔光强度</label><input id="bloomStrength" type="range" min="0" max="1.6" step="0.05" value="0.55"><output id="bloomStrengthOut">0.55</output></div>
-      <div class="row"><button type="button" id="front">观众正面</button><button type="button" id="wide">斜侧全景</button><button type="button" id="top">俯视</button></div>
+      <div class="row"><button type="button" id="front">观众正面</button><button type="button" id="wide">斜侧全景</button><button type="button" id="top">俯视</button><button type="button" id="orbit">环屏特写</button></div>
       <p class="hint">此版本支持本机屏幕或视频预览。跨设备房间和 WebXR 使用 <a href="../entropy-stage/">原版舞台</a>。</p>
     </div>
   </section>

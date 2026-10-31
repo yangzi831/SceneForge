@@ -103,7 +103,7 @@ $("share").addEventListener("click", async () => {
     await element.play();
     setVideoTexture(element);
     stream.getVideoTracks()[0].onended = () => { stopMedia(); status.textContent = "屏幕共享已结束，显示示意画面。"; };
-    status.textContent = "屏幕共享中：主屏、三角屏和顶屏使用同一组画面调整。";
+    status.textContent = "屏幕共享中：所有屏幕使用同一组画面调整。";
   } catch (error) {
     if (nextStream) { for (const track of nextStream.getTracks()) track.stop(); stopMedia(); }
     status.textContent = `屏幕共享未启动：${error.message || error}`;
@@ -126,7 +126,9 @@ $("bloom").addEventListener("change", () => { bloomPass.enabled = $("bloom").che
 $("bloomStrength").addEventListener("input", () => { bloomPass.strength = Number($("bloomStrength").value); $("bloomStrengthOut").textContent = bloomPass.strength.toFixed(2); });
 $("collapse").addEventListener("click", () => { const collapsed = $("panel").classList.toggle("collapsed"); $("collapse").textContent = collapsed ? "打开控制" : "收起"; });
 
-function view(position, target, top = false) {
+function view(position, target, top = false, fov = 42) {
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
   roofScreen.visible = !top;
   footprint.visible = top;
   camera.position.set(...position);
@@ -140,6 +142,7 @@ function front() {
 $("front").addEventListener("click", front);
 $("wide").addEventListener("click", () => view([38, 28, 58], [0, 10, -3]));
 $("top").addEventListener("click", () => view([0, 78, -2.9], [0, 0, -3], true));
+$("orbit").addEventListener("click", () => view([0, 19.2, 3.5], [0, 16.2, -2.3], false, 85));
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); composer.setSize(innerWidth, innerHeight); });
 addEventListener("pagehide", stopMedia, { once: true });
 applyAlignment();
