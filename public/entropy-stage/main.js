@@ -67,8 +67,8 @@ function setStatus(message, level = "info") {
   ui.status.dataset.level = level;
 }
 
-function createCurvedScreenGeometry({ chord = 12.4, arc = 15.2, height = 5.5, segments = 96 } = {}) {
-  // Solve the supplied arc/chord proportions approximately: 123.2° / R ≈ 7.06 m.
+function createCurvedScreenGeometry({ chord = 26, arc = 31.8, height = 10, segments = 128 } = {}) {
+  // Illustrative festival-scale arc, continuous UVs across the whole screen.
   const theta = 2.15;
   const radius = arc / theta;
   const half = theta / 2;
@@ -109,31 +109,62 @@ function createCurvedScreenGeometry({ chord = 12.4, arc = 15.2, height = 5.5, se
 
 function makeVenueGeometry(context) {
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 16),
+    new THREE.PlaneGeometry(80, 70),
     new THREE.MeshStandardMaterial({ color: 0x0a0c0f, roughness: 0.86, metalness: 0.24 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, 0);
   context.scene.add(floor);
 
-  const grid = new THREE.GridHelper(20, 40, 0x313740, 0x171b21);
+  const grid = new THREE.GridHelper(80, 80, 0x222c32, 0x12181c);
   grid.position.y = 0.006;
   context.scene.add(grid);
 
+  // A visible placeholder keeps the scene useful before selecting a video source.
+  const canvas = document.createElement("canvas");
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, "#032c2c");
+  gradient.addColorStop(0.35, "#0b8a70");
+  gradient.addColorStop(0.7, "#12244c");
+  gradient.addColorStop(1, "#052425");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < 18; i += 1) {
+    ctx.beginPath();
+    ctx.moveTo(-100, 300 + i * 45);
+    ctx.bezierCurveTo(500, 100 + i * 50, 1300, 850 - i * 35, 2200, 150 + i * 45);
+    ctx.strokeStyle = `rgba(122, 255, 205, ${0.035 + (i % 3) * 0.015})`;
+    ctx.lineWidth = 7 + i % 5;
+    ctx.stroke();
+  }
+  const previewTexture = new THREE.CanvasTexture(canvas);
+  previewTexture.colorSpace = THREE.SRGBColorSpace;
   const mainMaterial = new THREE.MeshBasicMaterial({
+    map: previewTexture,
     color: 0xffffff,
     side: THREE.DoubleSide,
     toneMapped: false,
   });
   const mainScreen = new THREE.Mesh(createCurvedScreenGeometry(), mainMaterial);
   mainScreen.name = "EntropyMainCurvedLED";
-  mainScreen.position.set(0, 3.25, -4.7);
+  mainScreen.position.set(0, 5.9, -7);
   context.scene.add(mainScreen);
 
-  // 35 m² and supplied 960:1080 centre-crop ratio -> approx 5.58 × 6.27 m.
+  // Overhead LED is a permanent surface; the auxiliary floor control remains separate.
+  const roofMaterial = new THREE.MeshBasicMaterial({ map: previewTexture, color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
+  const roofScreen = new THREE.Mesh(new THREE.PlaneGeometry(24, 10), roofMaterial);
+  roofScreen.name = "FestivalOverheadLED";
+  roofScreen.rotation.x = Math.PI / 2;
+  roofScreen.position.set(0, 11.4, -3);
+  context.scene.add(roofScreen);
+
+  // Optional auxiliary surface, kept for existing screen sharing controls.
   const ceilingWidth = Math.sqrt(35 * (960 / 1080));
   const ceilingDepth = 35 / ceilingWidth;
-  const floorAuxGeometry = new THREE.PlaneGeometry(12.4, 7);
+  const floorAuxGeometry = new THREE.PlaneGeometry(18, 5);
   const ceilingAuxGeometry = new THREE.PlaneGeometry(ceilingWidth, ceilingDepth);
   const auxMaterial = new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -144,17 +175,45 @@ function makeVenueGeometry(context) {
   const auxScreen = new THREE.Mesh(floorAuxGeometry, auxMaterial);
   auxScreen.name = "EntropyAuxiliaryLED";
   auxScreen.rotation.x = -Math.PI / 2;
-  auxScreen.position.set(0, 0.025, -1.2);
+  auxScreen.position.set(0, 0.94, -1.2);
   auxScreen.renderOrder = 2;
   context.scene.add(auxScreen);
 
-  // Stage reference slab, not claimed as measured geometry.
-  const stage = new THREE.Mesh(
-    new THREE.BoxGeometry(5.2, 0.16, 1.5),
-    new THREE.MeshStandardMaterial({ color: 0x171a1f, roughness: 0.78 }),
-  );
-  stage.position.set(0, 0.08, -1.3);
+  // Festival platform and rigging are visual estimates from the reference photographs.
+  const stage = new THREE.Group();
+  const deckMaterial = new THREE.MeshStandardMaterial({ color: 0x252b2d, roughness: 0.68, metalness: 0.25 });
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(29, 0.9, 15), deckMaterial);
+  deck.position.set(0, 0.45, -4.2);
+  stage.add(deck);
+  const fascia = new THREE.Mesh(new THREE.BoxGeometry(29, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0x8ae8c5 }));
+  fascia.position.set(0, 0.92, 2.35);
+  stage.add(fascia);
+  const riser = new THREE.Mesh(new THREE.BoxGeometry(8, 0.55, 2.6), deckMaterial);
+  riser.position.set(0, 1.175, -4.6);
+  stage.add(riser);
   context.scene.add(stage);
+
+  const rigMaterial = new THREE.MeshStandardMaterial({ color: 0x20272b, metalness: 0.7, roughness: 0.4 });
+  const frame = (w, h, d, x, y, z) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rigMaterial);
+    mesh.position.set(x, y, z);
+    context.scene.add(mesh);
+  };
+  for (const x of [-14, 14]) frame(0.35, 12, 0.35, x, 6, 1.5);
+  frame(28.4, 0.35, 0.35, 0, 11.7, 1.5);
+  frame(28.4, 0.35, 0.35, 0, 11.7, -7.5);
+  for (let x = -12; x <= 12; x += 2) {
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb9ffe0 }));
+    light.position.set(x, 11.45, 1.35);
+    context.scene.add(light);
+  }
+  // Circular overhead light rings echo the photographed roof rig.
+  for (const radius of [1.4, 2.8, 4.2]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.035, 8, 96), new THREE.MeshBasicMaterial({ color: 0x93efcb }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, 11.25, -3);
+    context.scene.add(ring);
+  }
 
   context.scene.add(new THREE.HemisphereLight(0xa9b6c6, 0x07090b, 0.9));
   const key = new THREE.DirectionalLight(0xffffff, 1.25);
@@ -164,6 +223,8 @@ function makeVenueGeometry(context) {
   return {
     mainScreen,
     mainMaterial,
+    roofMaterial,
+    previewTexture,
     auxScreen,
     auxMaterial,
     floorAuxGeometry,
@@ -185,6 +246,8 @@ onStart((context) => {
   const {
     mainScreen,
     mainMaterial,
+    roofMaterial,
+    previewTexture,
     auxScreen,
     auxMaterial,
     floorAuxGeometry,
@@ -226,7 +289,7 @@ onStart((context) => {
     device: "Screen",
   });
 
-  let auxMode = "FLOOR";
+  let auxMode = "OFF";
   let raf = 0;
   let configuredSource = null;
   let floorTexture = null;
@@ -261,6 +324,7 @@ onStart((context) => {
       material.color?.setRGB(gain, gain, gain);
     }
     auxMaterial.color.setRGB(gain, gain, gain);
+    roofMaterial.color.setRGB(gain, gain, gain);
     ui.screenBrightness.value = String(brightness);
     ui.brightnessValue.textContent = `${Math.round(brightness)}%`;
   };
@@ -279,12 +343,12 @@ onStart((context) => {
     if (auxMode === "FLOOR") {
       auxScreen.geometry = floorAuxGeometry;
       auxScreen.rotation.set(-Math.PI / 2, 0, 0);
-      auxScreen.position.set(0, 0.025, -1.2);
+      auxScreen.position.set(0, 0.94, -1.2);
       texture = floorTexture;
     } else if (auxMode === "CEILING") {
       auxScreen.geometry = ceilingAuxGeometry;
       auxScreen.rotation.set(Math.PI / 2, 0, 0);
-      auxScreen.position.set(0, 5.55, -1.15);
+      auxScreen.position.set(0, 11.3, -3);
       texture = ceilingTexture;
     }
 
@@ -296,7 +360,7 @@ onStart((context) => {
     const auxVisible = auxMode !== "OFF" && Boolean(texture);
     auxScreen.visible = auxVisible;
     const floorVisible = auxMode === "FLOOR" && auxVisible;
-    stage.visible = !floorVisible;
+    stage.visible = true;
     grid.visible = !floorVisible;
     ui.auxMode.textContent = `AUX: ${auxMode}`;
   };
@@ -321,6 +385,8 @@ onStart((context) => {
     ceilingTexture.offset.set(0.25, 0);
     ceilingTexture.needsUpdate = true;
 
+    roofMaterial.map = ceilingTexture;
+    roofMaterial.needsUpdate = true;
     configuredSource = source;
     applyAuxMode();
   };
@@ -332,6 +398,8 @@ onStart((context) => {
       if (configuredSource || floorTexture || ceilingTexture) {
         disposeAuxTextures();
         configuredSource = null;
+        roofMaterial.map = previewTexture;
+        roofMaterial.needsUpdate = true;
       }
       applyAuxMode();
       raf = requestAnimationFrame(syncAuxTextures);
@@ -351,11 +419,11 @@ onStart((context) => {
   syncAuxTextures();
 
   const resetStage = () => {
-    mainScreen.position.set(0, 3.25, -4.7);
+    mainScreen.position.set(0, 5.9, -7);
     mainScreen.quaternion.identity();
     applyAuxMode();
-    setCameraPose(context, [0, 3.1, 7.8], [0, 2.7, -3.0]);
-    setStatus("Stage reset to the ENTROPY preview origin.");
+    setCameraPose(context, [0, 8, 31], [0, 5.5, -3]);
+    setStatus("Festival stage view reset.");
   };
 
   ui.shareScreen.addEventListener("click", async () => {
@@ -388,17 +456,17 @@ onStart((context) => {
   });
 
   ui.viewFront.addEventListener("click", () => {
-    setCameraPose(context, [0, 3.1, 7.8], [0, 2.7, -3.0]);
+    setCameraPose(context, [0, 8, 31], [0, 5.5, -3]);
     setStatus("Front-of-house camera.");
   });
 
   ui.viewWide.addEventListener("click", () => {
-    setCameraPose(context, [8.5, 6.6, 9.5], [0, 2.7, -2.3]);
+    setCameraPose(context, [24, 17, 30], [0, 5, -3]);
     setStatus("Wide venue overview.");
   });
 
   ui.viewStage.addEventListener("click", () => {
-    setCameraPose(context, [-2.8, 1.8, -0.1], [2.0, 3.0, -4.4]);
+    setCameraPose(context, [-10, 3, 4], [3, 6, -7]);
     setStatus("Stage-side camera.");
   });
 
@@ -432,6 +500,8 @@ onStart((context) => {
 
   setScreenBrightness(DEFAULT_SCREEN_BRIGHTNESS);
   resetStage();
+  // Needle initializes orbit controls after onStart; restore the intended opening view.
+  window.setTimeout(() => setCameraPose(context, [0, 8, 31], [0, 5.5, -3]), 800);
   applyAuxMode();
   setStatus(`Ready in room ${roomId}. Use Pick Window / Screen on the source computer.`);
 });

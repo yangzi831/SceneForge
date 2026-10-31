@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#05070a" />
-    <title>SceneForge · ENTROPY Stage Preview</title>
+    <title>SceneForge · Festival Stage</title>
     <style>
       :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       * { box-sizing: border-box; }
@@ -56,18 +56,18 @@
 
     <section class="hud" id="hud" aria-label="ENTROPY stage preview controls">
       <div class="hud-header">
-        <h1>SceneForge · ENTROPY Stage <span class="badge">WebRTC prototype</span></h1>
+        <h1>SceneForge · Festival Stage <span class="badge">WebRTC prototype</span></h1>
         <button class="hud-toggle" id="toggle-hud" type="button" aria-controls="hud-content" aria-expanded="true">
           Hide controls
         </button>
       </div>
       <div class="hud-content" id="hud-content">
-        <p>Pick a desktop window → WebRTC room → curved main LED + floor/ceiling auxiliary LED → WebXR.</p>
+        <p>Continuous curved LED wall, overhead LED and festival platform. Share a window to put your visuals on the screens.</p>
         <div class="meta">
           <span>Room</span><strong id="room-id">—</strong>
-          <span>Main LED</span><strong>15.2 m arc · 12.4 m chord · 5.5 m high</strong>
-          <span>Canvas</span><strong>9600 × 3456 · 25:9</strong>
-          <span>Aux LED</span><strong>Floor full frame · ceiling center 960 × 1080 crop</strong>
+          <span>Main LED</span><strong>Continuous curved LED · illustrative festival scale</strong>
+          <span>Canvas</span><strong>One continuous image across the curved wall</strong>
+          <span>Aux LED</span><strong>Overhead LED + optional auxiliary screen</strong>
           <span>Secure</span><strong id="secure-state">—</strong>
         </div>
 
@@ -83,7 +83,7 @@
         </div>
         <div class="row">
           <button id="reset-stage" type="button">Reset Stage</button>
-          <button id="aux-mode" type="button">AUX: FLOOR</button>
+          <button id="aux-mode" type="button">AUX: OFF</button>
         </div>
 
         <div class="brightness-control">
@@ -97,8 +97,8 @@
           </div>
         </div>
 
-        <div class="note">Auxiliary LED cycles through FLOOR, CEILING, and OFF. Ceiling geometry is an estimated 5.58 × 6.27 m rectangle derived from the supplied 35 m² area and 960:1080 content ratio.</div>
-        <div class="status" id="status" role="status" aria-live="polite">Booting ENTROPY stage preview…</div>
+        <div class="note">Stage dimensions are visual estimates inspired by the reference photos. The overhead screen shows the centre of the shared image.</div>
+        <div class="status" id="status" role="status" aria-live="polite">Booting festival stage preview…</div>
       </div>
     </section>
 
