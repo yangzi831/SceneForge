@@ -384,7 +384,7 @@ export function makeVenueGeometry(context) {
     context.scene.add(light);
   }
   // Lighting composition: alternating warm and cool fixtures on the top truss,
-  // segmented vertical side towers, and a restrained fan of haze-like beams.
+  // segmented vertical side towers, and slender white beams.
   const lightHousing = new THREE.MeshStandardMaterial({ color: 0x10171a, metalness: 0.65, roughness: 0.42 });
   const coolLens = new THREE.MeshBasicMaterial({ color: 0xb8ffed, toneMapped: false });
   const warmLens = new THREE.MeshBasicMaterial({ color: 0xffd18b, toneMapped: false });
@@ -422,18 +422,56 @@ export function makeVenueGeometry(context) {
     lens.position.set(x, 1.12, z - 0.14);
     stage.add(lens);
   }
-  // Translucent cones suggest beams in haze, not physically simulated light.
-  const beamCool = new THREE.MeshBasicMaterial({ color: 0x6effdc, transparent: true, opacity: 0.045, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-  const beamWarm = new THREE.MeshBasicMaterial({ color: 0xffc782, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-  for (let i = -3; i <= 3; i += 1) {
-    const source = new THREE.Vector3(i * 3.4, 10.9, 1.1);
-    const target = new THREE.Vector3(i * 4.6, 0.96, 1.8);
-    const axis = source.clone().sub(target);
-    const beam = new THREE.Mesh(new THREE.ConeGeometry(1.4, axis.length(), 24, 1, true), i % 3 === 0 ? beamWarm : beamCool);
-    beam.position.copy(source.clone().add(target).multiplyScalar(0.5));
-    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.normalize());
-    beam.renderOrder = 3;
-    context.scene.add(beam);
+  // Narrow white beams fan gently outward with a soft radial falloff.
+  const makeBeamMaterial = (strength) => new THREE.ShaderMaterial({
+    uniforms: { strength: { value: strength } },
+    vertexShader: `
+      varying vec3 viewNormal;
+      varying vec3 viewDirection;
+      varying float beamHeight;
+      void main() {
+        vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+        viewNormal = normalize(normalMatrix * normal);
+        viewDirection = normalize(-viewPosition.xyz);
+        beamHeight = uv.y;
+        gl_Position = projectionMatrix * viewPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float strength;
+      varying vec3 viewNormal;
+      varying vec3 viewDirection;
+      varying float beamHeight;
+      void main() {
+        float center = pow(max(dot(normalize(viewNormal), normalize(viewDirection)), 0.0), 2.0);
+        float ends = smoothstep(0.0, 0.035, beamHeight) * (1.0 - smoothstep(0.965, 1.0, beamHeight));
+        gl_FragColor = vec4(vec3(1.0), center * ends * strength);
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const beamCoreMaterial = makeBeamMaterial(0.30);
+  const beamHazeMaterial = makeBeamMaterial(0.06);
+  const beamCoreGeometry = new THREE.CylinderGeometry(0.045, 0.045, 9.7, 20, 1, true);
+  const beamHazeGeometry = new THREE.CylinderGeometry(0.19, 0.19, 9.7, 24, 1, true);
+  for (let i = -4; i <= 4; i += 1) {
+    const top = new THREE.Vector3(i * 2.9, 10.8, 1.1);
+    const bottom = new THREE.Vector3(i * 3.25, 1.1, 1.1);
+    const direction = top.clone().sub(bottom);
+    const length = direction.length();
+    const midpoint = top.clone().add(bottom).multiplyScalar(0.5);
+    for (const [geometry, material] of [[beamHazeGeometry, beamHazeMaterial], [beamCoreGeometry, beamCoreMaterial]]) {
+      const beam = new THREE.Mesh(geometry, material);
+      beam.position.copy(midpoint);
+      beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+      beam.scale.y = length / 9.7;
+      beam.renderOrder = 3;
+      context.scene.add(beam);
+    }
   }
 
   // Circular overhead light rings echo the photographed roof rig.
