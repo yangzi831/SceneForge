@@ -64,7 +64,7 @@ function makeCustomPalette(hex) {
     gradient: [blend("#050d14", 0.9), blend("#06151a", 0.4), blend("#121530", 0.7), blend("#020910", 0.9)],
   };
 }
-function applyPalette(palette, selection) {
+function applyPalette(palette, selection, persist = true) {
   currentPalette = palette;
   activePalette = selection;
   setStagePalette(palette);
@@ -74,12 +74,12 @@ function applyPalette(palette, selection) {
   roofScreen.material.color.copy(tint);
   foregroundMaterial.uniforms.screenTint.value.copy(tint);
   for (const button of document.querySelectorAll("[data-palette]")) button.setAttribute("aria-pressed", String(button.dataset.palette === selection));
-  try { localStorage.setItem("sceneforge-stage-palette", JSON.stringify({ selection, custom: $("customColor").value, tint: $("tintVideo").checked })); } catch { /* optional */ }
+  if (persist) { try { localStorage.setItem("sceneforge-stage-palette", JSON.stringify({ selection, custom: $("customColor").value, tint: $("tintVideo").checked })); } catch { /* optional */ } }
 }
 for (const button of document.querySelectorAll("[data-palette]")) {
-  button.addEventListener("click", () => applyPalette(palettes[button.dataset.palette], button.dataset.palette));
+  button.addEventListener("click", () => { setPaletteMode("manual"); applyPalette(palettes[button.dataset.palette], button.dataset.palette); });
 }
-$("customColor").addEventListener("input", () => applyPalette(makeCustomPalette($("customColor").value), "custom"));
+$("customColor").addEventListener("input", () => { setPaletteMode("manual"); applyPalette(makeCustomPalette($("customColor").value), "custom"); });
 $("tintVideo").addEventListener("change", () => applyPalette(currentPalette, activePalette));
 try {
   const savedPalette = JSON.parse(localStorage.getItem("sceneforge-stage-palette") || "{}");
@@ -99,6 +99,40 @@ let showPlaying = false;
 let showElapsed = 0;
 let showLastFrame = 0;
 let previousTime = 0;
+const paletteCycle = ["mint", "blue", "violet", "rose", "amber", "mono"];
+const showPalettes = ["mint", "blue", "violet", "amber"];
+let paletteTimerStart = 0;
+let lastShowPalette = -1;
+function setPaletteMode(mode) {
+  $("paletteMode").value = mode;
+  $("paletteIntervalControl").hidden = mode !== "timer";
+  $("paletteModeHint").textContent = mode === "show"
+    ? "播放黑白视觉后，灯光跟随四个视觉段落换色；暂停时保持当前颜色。"
+    : mode === "timer" ? "按间隔循环推荐色卡；选择色卡可回到手动模式。" : "选择色卡可随时回到手动模式。";
+  paletteTimerStart = performance.now();
+  lastShowPalette = -1;
+}
+$("paletteMode").addEventListener("change", (event) => setPaletteMode(event.target.value));
+$("paletteInterval").addEventListener("input", () => {
+  $("paletteIntervalOut").textContent = `${$("paletteInterval").value} 秒`;
+  paletteTimerStart = performance.now();
+});
+function updateAutomaticPalette(now) {
+  const mode = $("paletteMode").value;
+  if (mode === "timer" && now - paletteTimerStart >= Number($("paletteInterval").value) * 1000) {
+    const index = paletteCycle.indexOf(activePalette);
+    const next = paletteCycle[(index + 1) % paletteCycle.length];
+    applyPalette(palettes[next], next, false);
+    paletteTimerStart = now;
+  } else if (mode === "show" && show && showPlaying) {
+    const segment = Math.floor((showElapsed % 32) / 8);
+    if (segment !== lastShowPalette) {
+      const next = showPalettes[segment];
+      applyPalette(palettes[next], next, false);
+      lastShowPalette = segment;
+    }
+  }
+}
 const ids = ["scaleX", "scaleY", "offsetX", "offsetY"];
 const defaults = { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 };
 try {
@@ -189,7 +223,7 @@ $("playShow").addEventListener("click", () => {
   stopMedia();
   show = createShowVisual();
   texture = show.texture;
-  showElapsed = 0; showLastFrame = 0; previousTime = 0; showPlaying = true;
+  showElapsed = 0; showLastFrame = 0; previousTime = 0; showPlaying = true; lastShowPalette = -1;
   show.render(0, Number($("showFlash").value));
   mainMaterial.map = texture; roofMaterial.map = texture; roofScreen.material.map = texture;
   mainMaterial.needsUpdate = true; roofMaterial.needsUpdate = true; roofScreen.material.needsUpdate = true;
@@ -267,5 +301,6 @@ renderer.setAnimationLoop((now) => {
       showLastFrame = now;
     }
   }
+  updateAutomaticPalette(now);
   controls.update(); composer.render();
 });

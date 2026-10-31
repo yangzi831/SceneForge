@@ -8,6 +8,7 @@
   <style>
     :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080e11; color: #eaf5f0; }
     #viewport { position: fixed; inset: 0; }
     #viewport canvas { display: block; width: 100%; height: 100%; }
@@ -27,6 +28,7 @@
     .palette button[aria-pressed="true"] { border-color:#c8ffe7; box-shadow:0 0 0 1px #c8ffe7; }
     .swatch { display:block; width:100%; height:22px; border-radius:5px; background:var(--swatch); }
     .custom-color { display:flex; gap:10px; align-items:center; font-size:12px; color:#d0e2d8; margin:10px 0; }
+    select { width:100%; background:#182321; color:#e9f6ef; border:1px solid #ffffff38; border-radius:8px; padding:8px; font:inherit; font-size:12px; }
     input[type=color] { width:40px; height:30px; padding:2px; border:1px solid #ffffff38; border-radius:6px; background:transparent; cursor:pointer; }
     .toggles { display:flex; gap:16px; font-size:12px; color:#d0e2d8; margin:8px 0; } .toggles input { accent-color:#8aecc6; }
     .status { font-size:11px; color:#99c6b1; line-height:1.5; } .hint { font-size:11px; color:#90a69c; }
@@ -60,6 +62,14 @@
         <button type="button" data-palette="violet" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#261a50,#b59ce9,#e8dfff)"></span>紫夜银光</button>
         <button type="button" data-palette="mono" aria-pressed="false"><span class="swatch" style="--swatch:linear-gradient(120deg,#172126,#879da1,#eef7f3)"></span>冷白月光</button>
       </div>
+      <label class="label" for="paletteMode">自动换色</label>
+      <select id="paletteMode">
+        <option value="manual">手动选择</option>
+        <option value="timer">按时间轮换</option>
+        <option value="show">跟随黑白视觉段落</option>
+      </select>
+      <div class="control" id="paletteIntervalControl" hidden><label for="paletteInterval">换色间隔</label><input id="paletteInterval" type="range" min="3" max="30" step="1" value="10"><output id="paletteIntervalOut">10 秒</output></div>
+      <p class="hint" id="paletteModeHint">选择色卡可随时回到手动模式。</p>
       <label class="custom-color">自定义主色 <input type="color" id="customColor" value="#9af5d1"></label>
       <div class="toggles"><label><input type="checkbox" id="tintVideo"> 同时为投屏画面染色</label></div>
       <p class="hint">默认只改变灯光、环境和示意画面；勾选后也会给你选择的画面染色。</p>
