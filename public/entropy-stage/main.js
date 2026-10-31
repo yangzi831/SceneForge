@@ -195,6 +195,54 @@ function makeVenueGeometry(context) {
   triangleScreen.name = "AudienceFacingTriangleLED";
   context.scene.add(triangleScreen);
 
+  // The face remains video-mapped; this extruded backing gives the arch real depth.
+  const archShape = new THREE.Shape();
+  archShape.moveTo(-20, 0.9);
+  archShape.lineTo(0, 23);
+  archShape.lineTo(20, 0.9);
+  archShape.lineTo(17.8, 0.9);
+  archShape.lineTo(0, 20.4);
+  archShape.lineTo(-17.8, 0.9);
+  archShape.closePath();
+  const archBody = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(archShape, { depth: 0.7, bevelEnabled: false }),
+    new THREE.MeshStandardMaterial({ color: 0x152c2a, metalness: 0.75, roughness: 0.32 }),
+  );
+  archBody.name = "TriangleLEDBacking";
+  archBody.position.z = 3.06;
+  context.scene.add(archBody);
+
+  // Bright cores and soft translucent halos outline both edges of the LED arch.
+  const lightCore = new THREE.MeshBasicMaterial({ color: 0xb5fff0, toneMapped: false });
+  const lightHalo = new THREE.MeshBasicMaterial({
+    color: 0x32f7c2, transparent: true, opacity: 0.17,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const addStrip = (from, to) => {
+    const start = new THREE.Vector3(from[0], from[1], 3.87);
+    const end = new THREE.Vector3(to[0], to[1], 3.87);
+    const direction = end.clone().sub(start);
+    const length = direction.length();
+    const center = start.clone().add(end).multiplyScalar(0.5);
+    for (const [radius, material] of [[0.075, lightCore], [0.26, lightHalo]]) {
+      const strip = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 10), material);
+      strip.position.copy(center);
+      strip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+      context.scene.add(strip);
+    }
+  };
+  const outline = [
+    [[-20, 0.9], [0, 23]], [[0, 23], [20, 0.9]],
+    [[-17.8, 0.9], [0, 20.4]], [[0, 20.4], [17.8, 0.9]],
+    [[-20, 0.9], [-17.8, 0.9]], [[17.8, 0.9], [20, 0.9]],
+  ];
+  for (const [from, to] of outline) addStrip(from, to);
+  for (const [x, y] of [[0, 22], [-18.8, 1.5], [18.8, 1.5]]) {
+    const glow = new THREE.PointLight(0x4effc8, 18, 12, 2);
+    glow.position.set(x, y, 5);
+    context.scene.add(glow);
+  }
+
   // Highlight the screen footprint from above while the roof is hidden.
   const outlinePositions = mainScreen.geometry.attributes.position.array;
   const footprintPoints = [];
