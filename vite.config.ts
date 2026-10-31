@@ -6,6 +6,9 @@ export default defineConfig({
   base: "./",
   build: {
     target: "es2022",
+    rollupOptions: {
+      input: { main: "index.html", festival: "festival-hq/index.html" },
+    },
     sourcemap: true,
   },
 });
