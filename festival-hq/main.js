@@ -10,6 +10,7 @@ import { createShowVisual } from "./show-visual.js";
 import { analyseTrack, createAudioReactor, analyseAccents, sampleAccents } from "./audio-analysis.js";
 import { VISUAL_STYLES } from "./visual-styles.js";
 import { createShowDirector } from "./show-director.ts";
+import { musicalArc } from "./performance-envelope.ts";
 
 const $ = (id) => document.getElementById(id);
 const viewport = $("viewport");
@@ -179,6 +180,7 @@ function stopMedia() {
   spatialFlow.uniforms.flowEnabled.value = 0;
   spatialFlow.uniforms.flowFlash.value = 0;
   spatialFlow.uniforms.flowBurst.value = 0;
+  spatialFlow.uniforms.flowLift.value = 0;
   accentTrack = null; previousAccentTime = -1;
   if (music) {
     const oldMusic = music; music = null;
@@ -415,10 +417,11 @@ renderer.setAnimationLoop((now) => {
     if (now - showLastFrame >= 1000 / 60) {
       lastAudioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample(), microAccent: sampleAccents(accentTrack, showElapsed, previousAccentTime) } : null;
       previousAccentTime = showElapsed;
+      const arc = musicalArc(showElapsed, lastAudioFeatures?.dropTime ?? null);
       liveCue = director.update({
         time: showElapsed, bpm: music ? musicAnalysis.bpm : 120,
         beatOffset: music ? musicAnalysis.beatOffset : 0,
-        beatsPerCue: Number($("autoPace").value),
+        beatsPerCue: Number($("autoPace").value) / (arc.lift > 0.65 ? 2 : 1),
         impact: lastAudioFeatures?.impact || 0, energy: lastAudioFeatures?.energy ?? 0.45,
       });
       effectiveStyle = visualStyle === "auto" ? liveCue.style : visualStyle;
@@ -433,6 +436,7 @@ renderer.setAnimationLoop((now) => {
       const pulse = show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, effectiveStyle, Number($("showDensity").value));
       spatialFlow.uniforms.flowFlash.value = pulse.flash;
       spatialFlow.uniforms.flowBurst.value = pulse.burst;
+      spatialFlow.uniforms.flowLift.value = pulse.lift;
       spatialFlow.uniforms.flowGain.value = 1 - pulse.hush * 0.8;
       showLastFrame = now;
     }

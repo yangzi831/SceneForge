@@ -8,6 +8,7 @@ export const spatialFlowGLSL = `
   uniform float flowEnergy;
   uniform float flowFlash;
   uniform float flowBurst;
+  uniform float flowLift;
   uniform float flowGain;
   uniform vec3 flowColor;
   uniform mat3 flowImageTransform;
@@ -38,7 +39,7 @@ export const spatialFlowGLSL = `
   }
   vec4 stageFlow(vec3 p) {
     float angle = atan(p.x, (p.z + 2.5) * 1.35);
-    float head = flowTime * 0.9;
+    float head = flowTime * 0.9 + flowLift * sin(flowTime * 1.5) * 0.35;
     float packets = 0.0;
     for (int i = 0; i < 3; i++) {
       float d = angle - head + float(i) * 2.094395;
@@ -61,7 +62,7 @@ export const spatialFlowGLSL = `
 export function createSpatialFlow() {
   const uniforms = {
     flowTime: { value: 0 }, flowEnabled: { value: 0 },
-    flowFlash: { value: 0 }, flowBurst: { value: 0 }, flowGain: { value: 1 },
+    flowFlash: { value: 0 }, flowBurst: { value: 0 }, flowLift: { value: 0 }, flowGain: { value: 1 },
     flowEnergy: { value: 0.4 }, flowImageTransform: { value: new THREE.Matrix3() }, flowColor: { value: new THREE.Color(0xd5f4ff) },
   };
   const attach = (material, frost = 0) => {
@@ -78,7 +79,7 @@ export function createSpatialFlow() {
         #ifdef USE_MAP
         if (flowEnabled > 0.5) {
           vec2 panoramaUv = (flowImageTransform * vec3(stagePanoramaUv(stageWorldPosition), 1.0)).xy;
-          diffuseColor.rgb = unmappedColor * texture2D(map, panoramaUv).rgb * (0.9 + flowBurst * 0.25) * flowGain;
+          diffuseColor.rgb = unmappedColor * texture2D(map, panoramaUv).rgb * (1.02 + flowBurst * 0.25 + flowLift * 0.12) * flowGain;
         }
         #endif
         vec4 spatial = stageFlow(stageWorldPosition);
@@ -87,7 +88,7 @@ export function createSpatialFlow() {
         diffuseColor.rgb += flowColor * stageFrost(stageWorldPosition) * ${frost.toFixed(3)} * mix(1.0, 0.25, flowEnabled);`,
       );
     };
-    material.customProgramCacheKey = () => `ice-spatial-flow-v7-${frost}`;
+    material.customProgramCacheKey = () => `ice-spatial-flow-v8-${frost}`;
     material.needsUpdate = true;
   };
   return { uniforms, attach };

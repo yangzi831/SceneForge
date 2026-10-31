@@ -12,7 +12,7 @@ export function createShowVisual() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace; texture.minFilter = THREE.LinearFilter;
   const rand = (n) => { const x = Math.sin(n * 127.1 + 19.19) * 43758.5453; return x - Math.floor(x); };
-  let kickTime = -10, pianoTime = -10, previousTime = -1, lastKick = 0, lastPiano = 0;
+  let kickTime = -10, pianoTime = -10, rhythmTime = -10, lastRhythmStep = -1, previousTime = -1, lastKick = 0, lastPiano = 0;
   function polygon(x, y, radius, sides, rotation) {
     ctx.beginPath();
     for (let i = 0; i <= sides; i++) { const a = rotation + TAU * i / sides; const px = x + Math.cos(a) * radius, py = y + Math.sin(a) * radius * 0.65; if (!i) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
@@ -20,14 +20,31 @@ export function createShowVisual() {
   }
   function render(time, intensity = 0.85, audio = null, style = "a", density = 2.2) {
     const pulse = performanceEnvelope(time, intensity, audio);
-    if (time < previousTime) { kickTime = -10; pianoTime = -10; lastKick = 0; lastPiano = 0; }
+    if (time < previousTime) { kickTime = -10; pianoTime = -10; rhythmTime = -10; lastRhythmStep = -1; lastKick = 0; lastPiano = 0; }
     if (pulse.kick > 0.48 && (lastKick < 0.38 || pulse.kick - lastKick > 0.2) && time - kickTime > 0.08) kickTime = time;
     if (pulse.piano > 0.48 && (lastPiano < 0.38 || pulse.piano - lastPiano > 0.2) && time - pianoTime > 0.075) pianoTime = time;
     lastKick = pulse.kick; lastPiano = pulse.piano;
     previousTime = time;
+    const rhythmStep = Math.floor(pulse.beat * 2);
+    if (pulse.lift > 0.48 && pulse.energy > 0.3 && rhythmStep !== lastRhythmStep) rhythmTime = time;
+    lastRhythmStep = rhythmStep;
+    const kickAge = time - kickTime, pianoAge = time - pianoTime, rhythmAge = time - rhythmTime;
+    const kickShock = Math.exp(-Math.max(0, kickAge) * 8), pianoShock = Math.exp(-Math.max(0, pianoAge) * 11);
+    const rhythmShock = Math.exp(-Math.max(0, rhythmAge) * 12) * pulse.lift * 0.75;
     for (const c of [ctx, copy]) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.fillStyle = "#000"; c.fillRect(0, 0, W, H); }
-    const motion = time * 1.6;
-    drawVisualStyle(ctx, copy, style === "auto" ? "a" : style, motion, audio, 1.7);
+    const motion = pulse.motion;
+    // Larger excursions and short zoom punches supply scale, not line clutter.
+    ctx.save();
+    const zoom = 1 + pulse.lift * 0.065 + Math.max(kickShock, rhythmShock) * 0.045;
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(Math.sin(time * 0.8) * pulse.lift * 0.035);
+    ctx.scale(zoom, zoom); ctx.translate(-W / 2, -H / 2);
+    drawVisualStyle(ctx, copy, style === "auto" ? "a" : style, motion, audio, 1.9 + pulse.lift * 0.25);
+    ctx.restore();
+    // Screen blending raises existing strokes without lifting the black field.
+    copy.globalAlpha = 1; copy.drawImage(canvas, 0, 0);
+    ctx.save(); ctx.globalCompositeOperation = "screen"; ctx.globalAlpha = pulse.lineGain;
+    ctx.drawImage(scratch, 0, 0); ctx.restore();
     // Keep the primary silhouette readable; sparse accents supply motion
     // without laying a second line lattice across every visual preset.
     const count = Math.floor(38 * density);
@@ -40,11 +57,9 @@ export function createShowVisual() {
       if (i % 5 === 0) { ctx.fillStyle = "#fff"; ctx.fillRect(x, y + 7, 2, 2); }
     }
     ctx.globalAlpha = 1;
-    const kickAge = time - kickTime, pianoAge = time - pianoTime;
-    const kickShock = Math.exp(-Math.max(0, kickAge) * 8), pianoShock = Math.exp(-Math.max(0, pianoAge) * 11);
-    if (kickShock > 0.03 || pulse.drop > 0) {
-      const force = Math.max(kickShock, pulse.drop); ctx.strokeStyle = `rgba(255,255,255,${force})`; ctx.lineWidth = 2 + force * 4;
-      for (let i = 0; i < 5; i++) polygon(W / 2, H / 2, 35 + kickAge * 1900 + i * 48, i % 2 ? 4 : 6, time * 0.15);
+    if (kickShock > 0.03 || pulse.drop > 0 || rhythmShock > 0.04) {
+      const force = Math.min(1, Math.max(kickShock, pulse.drop, rhythmShock) * pulse.hitGain); ctx.strokeStyle = `rgba(255,255,255,${force})`; ctx.lineWidth = 2.5 + force * 4.5;
+      for (let i = 0; i < 5 + Math.floor(pulse.lift * 3); i++) polygon(W / 2, H / 2, 35 + Math.min(kickAge, rhythmAge) * (1900 + pulse.lift * 1000) + i * 60, i % 2 ? 4 : 6, time * 0.15);
       for (let i = 0; i < 28; i++) { const a = i * TAU / 28; ctx.globalAlpha = force * (i % 4 ? 0.35 : 0.8); ctx.beginPath(); ctx.moveTo(W / 2 + Math.cos(a) * 45, H / 2 + Math.sin(a) * 30); ctx.lineTo(W / 2 + Math.cos(a) * W, H / 2 + Math.sin(a) * H); ctx.stroke(); }
     }
     ctx.globalAlpha = 1;
@@ -52,7 +67,7 @@ export function createShowVisual() {
       const tick = Math.floor(pianoTime * 30);
       for (let i = 0; i < 10; i++) {
         const x = rand(i + tick) * W, y = rand(i * 9 + tick) * H, width = 20 + rand(i * 3 + tick) * 160;
-        ctx.fillStyle = `rgba(255,255,255,${pianoShock * (i % 3 ? 0.15 : 0.65)})`;
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(0.8, pianoShock * pulse.hitGain * (i % 3 ? 0.15 : 0.6))})`;
         ctx.fillRect(x, y, width, 6 + rand(i + 3) * 60);
         ctx.strokeStyle = `rgba(255,255,255,${pianoShock})`; ctx.lineWidth = 2; ctx.strokeRect(x, y, width * 1.3, 35 + rand(i + 4) * 80);
       }
@@ -63,7 +78,7 @@ export function createShowVisual() {
       const tick = Math.floor(time * 28);
       for (let i = 0; i < 12 + Math.floor(tear * 30); i++) {
         const y = Math.floor(rand(i * 93 + tick) * H), height = 2 + Math.floor(rand(i + 7) * (10 + tear * 24));
-        const shift = (rand(i * 71 + tick) - 0.5) * (70 + tear * 450);
+        const shift = (rand(i * 71 + tick) - 0.5) * (85 + tear * (450 + pulse.lift * 180));
         ctx.drawImage(scratch, 0, y, W, height, shift, y, W, height);
         if (i % 4 === 0) { ctx.fillStyle = `rgba(255,255,255,${tear * 0.9})`; ctx.fillRect(0, y, W * rand(i + 77), 2); }
       }
@@ -71,16 +86,28 @@ export function createShowVisual() {
       for (let i = 0; i < 5; i++) ctx.fillRect(rand(i + tick) * W, rand(i * 4 + tick) * H, W * 0.16, 8 + tear * 45);
       ctx.restore();
     }
+    if (rhythmShock > 0.1 || kickShock * pulse.lift > 0.15) {
+      const force = Math.max(rhythmShock, kickShock * pulse.lift);
+      const age = Math.min(kickAge, rhythmAge), tick = Math.floor(Math.max(kickTime, rhythmTime) * 20);
+      for (let i = 0; i < 7; i++) {
+        const direction = (i / 7 + rand(i + tick) * 0.08) * TAU;
+        const radius = 85 + Math.max(0, age) * 1500;
+        const x = W / 2 + Math.cos(direction) * radius, y = H / 2 + Math.sin(direction) * radius * 0.6;
+        const size = 38 + rand(i + 90) * 100;
+        ctx.strokeStyle = `rgba(255,255,255,${force * 0.8})`; ctx.lineWidth = 3 + force * 2;
+        polygon(x, y, size, 4, direction + time * 0.2);
+      }
+    }
     if (pulse.hush) { ctx.fillStyle = `rgba(0,0,0,${pulse.hush})`; ctx.fillRect(0, 0, W, H); }
     // Fast contrast cuts retain the pattern; never wash the whole canvas white.
-    const cut = Math.max(0, intensity) * (1 - pulse.flash) * 0.46;
+    const cut = Math.max(0, intensity) * (1 - pulse.flash) * pulse.cutDepth;
     if (cut > 0) { ctx.fillStyle = `rgba(0,0,0,${cut})`; ctx.fillRect(0, 0, W, H); }
     if (pulse.glitch > 0.4 && pulse.flash > 0.4) {
       ctx.fillStyle = `rgba(255,255,255,${pulse.glitch * 0.3})`;
       for (let i = 0; i < 5; i++) ctx.fillRect(0, rand(i + Math.floor(time * 24)) * H, W, 1.5);
     }
     texture.needsUpdate = true;
-    return { ...pulse, kickShock, pianoShock };
+    return { ...pulse, kickShock, pianoShock, rhythmShock };
   }
   return { texture, foregroundTexture: texture, render, dispose() { texture.dispose(); } };
 }
