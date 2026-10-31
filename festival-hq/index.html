@@ -23,6 +23,9 @@
     .file input { display:none; } .label { font-size:12px; font-weight:650; color:#dcebe3; margin:12px 0 5px; }
     .control { display:grid; grid-template-columns: 65px 1fr 44px; gap:8px; align-items:center; font-size:11px; color:#b9c9c0; margin:8px 0; }
     input[type=range] { width:100%; accent-color:#8aecc6; } output { text-align:right; font-variant-numeric:tabular-nums; }
+    .visual-presets { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:8px 0; }
+    .visual-presets button { padding:8px 4px; font-size:11px; }
+    .visual-presets button[aria-pressed="true"] { border-color:#a9f4d5; color:#bfffe2; background:#a9f4d51c; }
     .palette { display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; margin:8px 0; }
     .palette button { padding:7px 5px; line-height:1.3; display:flex; flex-direction:column; align-items:center; gap:5px; }
     .palette button[aria-pressed="true"] { border-color:#c8ffe7; box-shadow:0 0 0 1px #c8ffe7; }
@@ -47,8 +50,12 @@
       <p class="status" id="status">默认示意画面。拖动旋转视角，滚轮缩放。</p>
       <hr class="divider" />
       <div class="label">内置演出视觉 · 黑白点线</div>
-      <p class="hint">点阵、线框和几何切片在前后屏间流动，32 秒循环。</p>
+      <p class="hint">自动组合循环播放，也可以用按键切换不同视觉。</p>
       <div class="row"><button type="button" class="primary" id="playShow">播放黑白视觉</button><button type="button" id="pauseShow" disabled>暂停</button></div>
+      <div class="label">现场视觉切换</div>
+      <div class="row"><button type="button" id="visualAuto" aria-pressed="true">自动组合</button></div>
+      <div class="visual-presets" id="visualPresets"></div>
+      <p class="hint">点击按钮或按 A–L 切换；播放音乐时也可实时切换。</p>
       <div class="control"><label for="showSpeed">运动速度</label><input id="showSpeed" type="range" min="0.5" max="1.5" step="0.1" value="1"><output id="showSpeedOut">1.0×</output></div>
       <div class="control"><label for="showFlash">频闪强度</label><input id="showFlash" type="range" min="0" max="1" step="0.05" value="0.55"><output id="showFlashOut">55%</output></div>
       <div class="row"><label class="file">选择音乐并同步<input id="audioFile" type="file" accept="audio/*,.m4a" /></label></div>

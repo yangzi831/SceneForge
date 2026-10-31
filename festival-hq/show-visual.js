@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { drawVisualStyle } from "./visual-styles.js";
 
 // Both canvases share one clock and vanishing point. The sparse foreground
 // layer is keyed against black by the stage's existing scrim shader.
@@ -28,7 +29,7 @@ export function createShowVisual() {
     if (weight <= 0) return;
     ctx.save(); ctx.globalAlpha = weight; draw(); ctx.restore();
   }
-  function render(t, flashIntensity = 0.55, audio = null) {
+  function render(t, flashIntensity = 0.55, audio = null, style = "auto") {
     const songTime = t;
     // A 32-second cycle; every motion phase returns to its starting point.
     t = ((t % 32) + 32) % 32;
@@ -37,7 +38,7 @@ export function createShowVisual() {
     const fade = Math.max(0, Math.min(1, (segmentTime - 6.6) / 1.4));
     const smooth = fade * fade * (3 - 2 * fade);
     const weights = [0, 0, 0, 0];
-    weights[segment] = 1 - smooth; weights[(segment + 1) % 4] = smooth;
+    if (style === "auto") { weights[segment] = 1 - smooth; weights[(segment + 1) % 4] = smooth; }
     const cx = W * (0.5 + 0.045 * Math.sin(phase * 2));
     const cy = H * (0.50 + 0.035 * Math.cos(phase * 3));
     const subdividedBeat = audio ? Math.max(3, Math.min(9, audio.bpm / 60 * 4)) : 5;
@@ -51,7 +52,7 @@ export function createShowVisual() {
 
     // The underlying perspective field ties the four movements together.
     ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1;
-    for (let i = 0; i < 32; i++) {
+    for (let i = 0; i < (style === "auto" ? 32 : 0); i++) {
       const a = TAU * i / 32 + phase * 0.5;
       ctx.globalAlpha = 0.07 + flash * 0.09;
       line(ctx, cx, cy, cx + Math.cos(a) * W, cy + Math.sin(a) * H);
@@ -115,6 +116,7 @@ export function createShowVisual() {
         ctx.fillStyle = `rgba(255,255,255,${0.25 + rand(i + 73) * 0.7})`; ctx.fillRect(x, y, size, size);
       }
     });
+    if (style !== "auto") drawVisualStyle(ctx, fg, style, songTime, audio);
     if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.32})`; ctx.fillRect(0, 0, W, H); }
 
     if (audio) {
@@ -140,14 +142,14 @@ export function createShowVisual() {
     // Near-camera outlines and particles move faster and larger than the back
     // layer, creating parallax while leaving the black scrim transparent.
     fg.strokeStyle = "#fff";
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < (style === "auto" ? 5 : 0); i++) {
       const z = (i / 5 + t / 8) % 1;
       fg.globalAlpha = 0.22 + z * 0.65;
       fg.lineWidth = 1.5 + z * 3 + flash * 3;
       polygon(fg, cx + Math.sin(phase * 2) * 70 * z, cy, 95 + z * z * 1000, segment === 3 ? 6 : 3, -Math.PI / 2 - phase * 2, 0.68);
     }
     fg.globalAlpha = 1;
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < (style === "auto" ? 70 : 0); i++) {
       const z = (rand(i + 2000) + t / 4) % 1;
       const a = rand(i + 2500) * TAU - phase * 3;
       const r = 120 + z * z * 1000;

@@ -8,6 +8,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { makeVenueGeometry } from "./stage.js";
 import { createShowVisual } from "./show-visual.js";
 import { analyseTrack, createAudioReactor } from "./audio-analysis.js";
+import { VISUAL_STYLES } from "./visual-styles.js";
 
 const $ = (id) => document.getElementById(id);
 const viewport = $("viewport");
@@ -99,6 +100,8 @@ let show = null;
 let showPlaying = false;
 let showElapsed = 0;
 let showLastFrame = 0;
+let visualStyle = "auto";
+let lastAudioFeatures = null;
 let previousTime = 0;
 let music = null;
 let musicContext = null;
@@ -173,7 +176,7 @@ function stopMedia() {
     oldMusic.pause(); oldMusic.removeAttribute("src"); oldMusic.load(); oldMusic.remove();
   }
   if (musicContext) { musicContext.close().catch(() => {}); musicContext = null; }
-  musicReactor = null;
+  musicReactor = null; lastAudioFeatures = null;
   $("showSpeed").disabled = false;
   if (stream) { for (const track of stream.getTracks()) { track.onended = null; track.stop(); } stream = null; }
   if (video) { video.pause(); video.srcObject = null; video.removeAttribute("src"); video.load(); video = null; }
@@ -238,7 +241,7 @@ function startShow() {
   show = createShowVisual();
   texture = show.texture;
   showElapsed = 0; showLastFrame = 0; previousTime = 0; showPlaying = true; lastShowPalette = -1;
-  show.render(0, Number($("showFlash").value));
+  show.render(0, Number($("showFlash").value), null, visualStyle);
   mainMaterial.map = texture; roofMaterial.map = texture; roofScreen.material.map = texture;
   mainMaterial.needsUpdate = true; roofMaterial.needsUpdate = true; roofScreen.material.needsUpdate = true;
   $("tintVideo").checked = false;
@@ -248,6 +251,31 @@ function startShow() {
   status.textContent = "黑白演出视觉播放中：前纱幕与后屏同步，画面持续循环。";
 }
 $("playShow").addEventListener("click", startShow);
+function chooseVisualStyle(style) {
+  visualStyle = style;
+  $("visualAuto").setAttribute("aria-pressed", String(style === "auto"));
+  for (const button of $("visualPresets").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.visual === style));
+  }
+  if (!show) startShow();
+  else if (!showPlaying) show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, visualStyle);
+}
+$("visualAuto").addEventListener("click", () => chooseVisualStyle("auto"));
+for (const [key, name] of VISUAL_STYLES) {
+  const button = document.createElement("button");
+  button.type = "button"; button.dataset.visual = key;
+  button.textContent = `${key.toUpperCase()} · ${name}`;
+  button.setAttribute("aria-pressed", "false");
+  button.addEventListener("click", () => chooseVisualStyle(key));
+  $("visualPresets").appendChild(button);
+}
+addEventListener("keydown", (event) => {
+  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+  const target = event.target;
+  if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, audio"))) return;
+  const key = event.key.toLowerCase();
+  if (VISUAL_STYLES.some(([letter]) => letter === key)) { event.preventDefault(); chooseVisualStyle(key); }
+});
 $("audioFile").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -308,7 +336,7 @@ $("pauseShow").addEventListener("click", () => {
 $("showSpeed").addEventListener("input", () => { $("showSpeedOut").textContent = `${Number($("showSpeed").value).toFixed(1)}×`; });
 $("showFlash").addEventListener("input", () => {
   $("showFlashOut").textContent = `${Math.round(Number($("showFlash").value) * 100)}%`;
-  if (show && !showPlaying) show.render(showElapsed, Number($("showFlash").value));
+  if (show && !showPlaying) show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, visualStyle);
 });
 $("stop").addEventListener("click", () => { stopMedia(); status.textContent = "已停止，显示示意画面。"; });
 $("scrimVisible").addEventListener("change", () => { foregroundScreen.visible = $("scrimVisible").checked; });
@@ -364,8 +392,8 @@ renderer.setAnimationLoop((now) => {
     else if (previousTime) showElapsed += Math.min((now - previousTime) / 1000, 0.1) * Number($("showSpeed").value);
     previousTime = now;
     if (now - showLastFrame >= 1000 / 30) {
-      const audioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample() } : null;
-      show.render(showElapsed, Number($("showFlash").value), audioFeatures);
+      lastAudioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample() } : null;
+      show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, visualStyle);
       showLastFrame = now;
     }
   }

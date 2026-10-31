@@ -55,7 +55,7 @@ export function createAudioReactor(analyser) {
       averageFlux = averageFlux * 0.94 + flux * 0.06;
       impact = Math.max(excess, impact * 0.72);
       envelope += (level - envelope) * 0.22;
-      return { energy: Math.min(1, envelope * 2), bass, impact: Math.min(1, impact) };
+      return { energy: Math.min(1, envelope * 2), bass, impact: Math.min(1, impact), bands: Array.from({ length: 64 }, (_, i) => spectrum[Math.min(spectrum.length - 1, 1 + Math.floor(Math.pow(i / 64, 1.8) * 250))] / 255) };
     },
   };
 }
