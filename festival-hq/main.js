@@ -9,6 +9,7 @@ import { makeVenueGeometry } from "./stage.js";
 import { createShowVisual } from "./show-visual.js";
 import { analyseTrack, createAudioReactor } from "./audio-analysis.js";
 import { VISUAL_STYLES } from "./visual-styles.js";
+import { createShowDirector } from "./show-director.ts";
 
 const $ = (id) => document.getElementById(id);
 const viewport = $("viewport");
@@ -24,7 +25,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 viewport.appendChild(renderer.domElement);
 
-const { setStagePalette, mainMaterial, roofMaterial, roofScreen, foregroundScreen, foregroundMaterial, footprint, previewTexture } = makeVenueGeometry({ scene });
+const { setStagePalette, spatialFlow, mainMaterial, roofMaterial, roofScreen, foregroundScreen, foregroundMaterial, footprint, previewTexture } = makeVenueGeometry({ scene });
 const ground = scene.getObjectByName("ReflectiveGround");
 const deck = scene.getObjectByName("ReflectiveStageDeck");
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -55,8 +56,8 @@ const palettes = {
   violet: { primary: "#d8c7ff", halo: "#9b7ad9", accent: "#f2eaff", beam: "#f8f4ff", background: "#191528", gradient: ["#1a1032", "#60468b", "#2c2557", "#131327"] },
   mono: { primary: "#e3f2ee", halo: "#88a9a5", accent: "#fff7e8", beam: "#ffffff", background: "#141c1d", gradient: ["#101c1c", "#506b68", "#25363f", "#111a1c"] },
 };
-let activePalette = "mint";
-let currentPalette = palettes.mint;
+let activePalette = "blue";
+let currentPalette = palettes.blue;
 function makeCustomPalette(hex) {
   const color = new THREE.Color(hex);
   const blend = (other, amount) => `#${color.clone().lerp(new THREE.Color(other), amount).getHexString()}`;
@@ -109,14 +110,17 @@ let musicReactor = null;
 let musicAnalysis = { bpm: 120, beatOffset: 0, dropTime: null };
 let audioGeneration = 0;
 const paletteCycle = ["mint", "blue", "violet", "rose", "amber", "mono"];
-const showPalettes = ["mint", "blue", "violet", "amber"];
+const director = createShowDirector(VISUAL_STYLES.map(([key]) => key), paletteCycle.length);
+let liveCue = { style: "a", paletteIndex: 1 };
+let effectiveStyle = "a";
+let lastVisualLabel = "";
 let paletteTimerStart = 0;
 let lastShowPalette = -1;
 function setPaletteMode(mode) {
   $("paletteMode").value = mode;
   $("paletteIntervalControl").hidden = mode !== "timer";
   $("paletteModeHint").textContent = mode === "show"
-    ? "播放黑白视觉后，灯光跟随四个视觉段落换色；暂停时保持当前颜色。"
+    ? "配色随音乐节奏和视觉自动轮换；暂停时保持当前颜色。"
     : mode === "timer" ? "按间隔循环推荐色卡；选择色卡可回到手动模式。" : "选择色卡可随时回到手动模式。";
   paletteTimerStart = performance.now();
   lastShowPalette = -1;
@@ -133,13 +137,10 @@ function updateAutomaticPalette(now) {
     const next = paletteCycle[(index + 1) % paletteCycle.length];
     applyPalette(palettes[next], next, false);
     paletteTimerStart = now;
-  } else if (mode === "show" && show && showPlaying) {
-    const segment = Math.floor((showElapsed % 32) / 8);
-    if (segment !== lastShowPalette) {
-      const next = showPalettes[segment];
-      applyPalette(palettes[next], next, false);
-      lastShowPalette = segment;
-    }
+  } else if (mode === "show" && show && showPlaying && lastShowPalette !== liveCue.paletteIndex) {
+    const next = paletteCycle[liveCue.paletteIndex];
+    applyPalette(palettes[next], next, false);
+    lastShowPalette = liveCue.paletteIndex;
   }
 }
 const ids = ["scaleX", "scaleY", "offsetX", "offsetY"];
@@ -151,8 +152,8 @@ try {
 
 function applyAlignment() {
   const values = Object.fromEntries(ids.map((id) => [id, Number($(id).value)]));
-  // The two generated layers use the same UV adjustment and timeline.
-  const foregroundTexture = show ? show.foregroundTexture : texture;
+  // Both layers share one panoramic source and the same user UV adjustment.
+  const foregroundTexture = texture;
   for (const screenTexture of new Set([texture, foregroundTexture])) {
     screenTexture.wrapS = THREE.ClampToEdgeWrapping;
     screenTexture.wrapT = THREE.ClampToEdgeWrapping;
@@ -161,6 +162,7 @@ function applyAlignment() {
     screenTexture.updateMatrix();
     screenTexture.needsUpdate = true;
   }
+  spatialFlow.uniforms.flowImageTransform.value.copy(texture.matrix);
   foregroundMaterial.uniforms.image.value = foregroundTexture;
   foregroundMaterial.uniforms.imageTransform.value = foregroundTexture.matrix;
   for (const id of ids) $(`${id}Out`).textContent = values[id].toFixed(2);
@@ -171,6 +173,7 @@ $("resetUV").addEventListener("click", () => { for (const id of ids) $(id).value
 
 function stopMedia() {
   audioGeneration++;
+  spatialFlow.uniforms.flowEnabled.value = 0;
   if (music) {
     const oldMusic = music; music = null;
     oldMusic.pause(); oldMusic.removeAttribute("src"); oldMusic.load(); oldMusic.remove();
@@ -236,29 +239,38 @@ $("file").addEventListener("change", async (event) => {
   catch (error) { stopMedia(); status.textContent = `无法播放视频：${error.message || error}`; }
   event.target.value = "";
 });
-function startShow() {
+function startShow(resetAutomation = true) {
   stopMedia();
+  if (resetAutomation) {
+    visualStyle = "auto";
+    $("visualAuto").setAttribute("aria-pressed", "true");
+    setPaletteMode("show");
+  }
   show = createShowVisual();
+  spatialFlow.uniforms.flowEnabled.value = 1;
   texture = show.texture;
   showElapsed = 0; showLastFrame = 0; previousTime = 0; showPlaying = true; lastShowPalette = -1;
-  show.render(0, Number($("showFlash").value), null, visualStyle);
+  show.render(0, Number($("showFlash").value), null, effectiveStyle);
   mainMaterial.map = texture; roofMaterial.map = texture; roofScreen.material.map = texture;
   mainMaterial.needsUpdate = true; roofMaterial.needsUpdate = true; roofScreen.material.needsUpdate = true;
   $("tintVideo").checked = false;
-  applyPalette(palettes.mono, "mono");
+  applyPalette(palettes.blue, "blue", false);
   applyAlignment();
   $("pauseShow").disabled = false;
-  status.textContent = "黑白演出视觉播放中：前纱幕与后屏同步，画面持续循环。";
+  status.textContent = "碎冰舞台自动演出中：视觉、配色与环流持续变化。";
 }
-$("playShow").addEventListener("click", startShow);
+$("playShow").addEventListener("click", () => startShow());
 function chooseVisualStyle(style) {
   visualStyle = style;
   $("visualAuto").setAttribute("aria-pressed", String(style === "auto"));
   for (const button of $("visualPresets").querySelectorAll("button")) {
     button.setAttribute("aria-pressed", String(button.dataset.visual === style));
   }
-  if (!show) startShow();
-  else if (!showPlaying) show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, visualStyle);
+  if (style === "auto") setPaletteMode("show");
+  if (!show) startShow(false);
+  effectiveStyle = style === "auto" ? liveCue.style : style;
+  $("liveVisual").textContent = `${style === "auto" ? "自动" : "手动"} · ${VISUAL_STYLES.find(([key]) => key === effectiveStyle)?.[1] || "空间环流"}`;
+  if (!showPlaying) show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, effectiveStyle);
 }
 $("visualAuto").addEventListener("click", () => chooseVisualStyle("auto"));
 for (const [key, name] of VISUAL_STYLES) {
@@ -336,11 +348,11 @@ $("pauseShow").addEventListener("click", () => {
 $("showSpeed").addEventListener("input", () => { $("showSpeedOut").textContent = `${Number($("showSpeed").value).toFixed(1)}×`; });
 $("showFlash").addEventListener("input", () => {
   $("showFlashOut").textContent = `${Math.round(Number($("showFlash").value) * 100)}%`;
-  if (show && !showPlaying) show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, visualStyle);
+  if (show && !showPlaying) show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, effectiveStyle);
 });
 $("stop").addEventListener("click", () => { stopMedia(); status.textContent = "已停止，显示示意画面。"; });
 $("scrimVisible").addEventListener("change", () => { foregroundScreen.visible = $("scrimVisible").checked; });
-for (const [id, uniform] of [["scrimOpacity", "opacity"], ["scrimKey", "keyLevel"]]) {
+for (const [id, uniform] of [["scrimOpacity", "opacity"], ["scrimKey", "keyLevel"], ["scrimHaze", "haze"]]) {
   $(id).addEventListener("input", () => {
     const value = Number($(id).value);
     foregroundMaterial.uniforms[uniform].value = value;
@@ -375,10 +387,10 @@ function view(position, target, top = false, fov = 42) {
 }
 function front() {
   const aspect = Math.max(innerWidth / innerHeight, 0.3);
-  view([0, 13, Math.max(58, 50 * 1.5 / aspect)], [0, 11, -3]);
+  view([-6, 14, Math.max(75, 63 * 1.5 / aspect)], [-6, 10, -2]);
 }
 $("front").addEventListener("click", front);
-$("wide").addEventListener("click", () => view([38, 28, 58], [0, 10, -3]));
+$("wide").addEventListener("click", () => view([44, 23, 48], [0, 9, -2]));
 $("top").addEventListener("click", () => view([0, 78, -2.9], [0, 0, -3], true));
 $("performer").addEventListener("click", () => view([1.2, 4.4, 20], [0, 2.1, -2.4], false, 55));
 $("orbit").addEventListener("click", () => view([0, 19.2, 3.5], [0, 16.2, -2.3], false, 85));
@@ -386,6 +398,7 @@ addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; cam
 addEventListener("pagehide", stopMedia, { once: true });
 applyAlignment();
 front();
+startShow();
 renderer.setAnimationLoop((now) => {
   if (show && showPlaying) {
     if (music) showElapsed = music.currentTime;
@@ -393,7 +406,22 @@ renderer.setAnimationLoop((now) => {
     previousTime = now;
     if (now - showLastFrame >= 1000 / 30) {
       lastAudioFeatures = musicReactor ? { ...musicAnalysis, ...musicReactor.sample() } : null;
-      show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, visualStyle);
+      liveCue = director.update({
+        time: showElapsed, bpm: music ? musicAnalysis.bpm : 120,
+        beatOffset: music ? musicAnalysis.beatOffset : 0,
+        beatsPerCue: Number($("autoPace").value),
+        impact: lastAudioFeatures?.impact || 0, energy: lastAudioFeatures?.energy ?? 0.45,
+      });
+      effectiveStyle = visualStyle === "auto" ? liveCue.style : visualStyle;
+      if (lastVisualLabel !== `${visualStyle}:${effectiveStyle}`) {
+        const entry = VISUAL_STYLES.find(([key]) => key === effectiveStyle);
+        $("liveVisual").textContent = `${visualStyle === "auto" ? "自动" : "手动"} · ${entry?.[1] || "空间环流"}`;
+        for (const button of $("visualPresets").querySelectorAll("button")) button.setAttribute("aria-pressed", String(button.dataset.visual === effectiveStyle));
+        lastVisualLabel = `${visualStyle}:${effectiveStyle}`;
+      }
+      spatialFlow.uniforms.flowTime.value = showElapsed * (music ? musicAnalysis.bpm / 120 : 1);
+      spatialFlow.uniforms.flowEnergy.value = lastAudioFeatures?.energy ?? 0.45;
+      show.render(showElapsed, Number($("showFlash").value), lastAudioFeatures, effectiveStyle);
       showLastFrame = now;
     }
   }

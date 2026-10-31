@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#08100f" />
-  <title>SceneForge · 三角音乐节舞台</title>
+  <title>SceneForge · 碎冰环流舞台</title>
   <style>
     :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
@@ -43,19 +43,22 @@
 <body>
   <div id="viewport" role="img" aria-label="三维舞台预览"></div>
   <section class="panel" id="panel">
-    <div class="header"><div class="title"><span class="eyebrow">SCENEFORGE / THREE.JS</span><h1>音乐节舞台 · 画质预览</h1></div><button type="button" id="collapse" style="flex:none">收起</button></div>
+    <div class="header"><div class="title"><span class="eyebrow">SCENEFORGE / THREE.JS</span><h1>碎冰环流 · 音乐节舞台</h1></div><button type="button" id="collapse" style="flex:none">收起</button></div>
     <div class="content">
-      <p>一组画面调整同时作用于主屏、三角屏、顶屏、环屏、球屏和前纱幕。</p>
+      <p>一组画面调整同时作用于主屏、冰片、顶屏、环屏、球屏和前纱幕。</p>
       <div class="row"><button type="button" class="primary" id="share">选择窗口 / 屏幕</button><label class="file">选择视频<input id="file" type="file" accept="video/*" /></label><button type="button" id="stop">停止</button></div>
       <p class="status" id="status">默认示意画面。拖动旋转视角，滚轮缩放。</p>
       <hr class="divider" />
-      <div class="label">内置演出视觉 · 黑白点线</div>
-      <p class="hint">自动组合循环播放，也可以用按键切换不同视觉。</p>
-      <div class="row"><button type="button" class="primary" id="playShow">播放黑白视觉</button><button type="button" id="pauseShow" disabled>暂停</button></div>
-      <div class="label">现场视觉切换</div>
-      <div class="row"><button type="button" id="visualAuto" aria-pressed="true">自动组合</button></div>
-      <div class="visual-presets" id="visualPresets"></div>
-      <p class="hint">点击按钮或按 A–Z 切换；播放音乐时也可实时切换。</p>
+      <div class="label">全自动演出 · 黑白点线</div>
+      <p class="hint">视觉、颜色和空间环流自动跟随节奏变化；选择音乐即可同步演出。</p>
+      <div class="row"><button type="button" class="primary" id="playShow">重新开始演出</button><button type="button" id="pauseShow" disabled>暂停</button></div>
+      <div class="label">自动编排</div>
+      <div class="row"><button type="button" id="visualAuto" aria-pressed="true">全自动 · 音乐驱动</button></div>
+      <p class="status" id="liveVisual">自动 · 空间环流</p>
+      <label class="label" for="autoPace">变化速度</label>
+      <select id="autoPace"><option value="2">快速 · 每 2 拍变化</option><option value="4" selected>标准 · 每 4 拍变化</option><option value="8">舒展 · 每 8 拍变化</option></select>
+      <p class="hint">配色比画面切换更快；强烈瞬态会触发额外变化。无音乐时自动循环。</p>
+      <details><summary class="hint" style="cursor:pointer;margin-top:10px">手动覆盖 · A–Z（可选）</summary><div class="visual-presets" id="visualPresets"></div></details>
       <div class="control"><label for="showSpeed">运动速度</label><input id="showSpeed" type="range" min="0.5" max="1.5" step="0.1" value="1"><output id="showSpeedOut">1.0×</output></div>
       <div class="control"><label for="showFlash">频闪强度</label><input id="showFlash" type="range" min="0" max="1" step="0.05" value="0.55"><output id="showFlashOut">55%</output></div>
       <div class="row"><label class="file">选择音乐并同步<input id="audioFile" type="file" accept="audio/*,.m4a" /></label></div>
@@ -75,7 +78,7 @@
       <select id="paletteMode">
         <option value="manual">手动选择</option>
         <option value="timer">按时间轮换</option>
-        <option value="show">跟随黑白视觉段落</option>
+        <option value="show" selected>跟随演出节奏自动换色</option>
       </select>
       <div class="control" id="paletteIntervalControl" hidden><label for="paletteInterval">换色间隔</label><input id="paletteInterval" type="range" min="3" max="30" step="1" value="10"><output id="paletteIntervalOut">10 秒</output></div>
       <p class="hint" id="paletteModeHint">选择色卡可随时回到手动模式。</p>
@@ -91,10 +94,11 @@
       <div class="row"><button type="button" id="resetUV">重置画面</button></div>
       <p class="hint">范围越小画面越放大；偏移以纹理为单位，边缘外使用边缘颜色。设置会保存在此浏览器。</p>
       <hr class="divider" />
-      <div class="label">三角形前方透明屏</div>
-      <div class="toggles"><label><input type="checkbox" id="scrimVisible" checked> 显示三角前纱幕</label></div>
-      <div class="control"><label for="scrimOpacity">画面强度</label><input id="scrimOpacity" type="range" min="0" max="1" step="0.01" value="0.42"><output id="scrimOpacityOut">0.42</output></div>
+      <div class="label">弧形前纱幕</div>
+      <div class="toggles"><label><input type="checkbox" id="scrimVisible" checked> 显示前纱幕</label></div>
+      <div class="control"><label for="scrimOpacity">画面强度</label><input id="scrimOpacity" type="range" min="0" max="1" step="0.01" value="0.54"><output id="scrimOpacityOut">0.54</output></div>
       <div class="control"><label for="scrimKey">消除暗部</label><input id="scrimKey" type="range" min="0" max="0.9" step="0.01" value="0.12"><output id="scrimKeyOut">0.12</output></div>
+      <div class="control"><label for="scrimHaze">轻雾质感</label><input id="scrimHaze" type="range" min="0" max="0.12" step="0.005" value="0.035"><output id="scrimHazeOut">0.04</output></div>
       <p class="hint">五位乐手在透明屏后方，鼓组位于后方高台。黑底视觉较容易透出人物；亮色画面仍会叠在人物前面。</p>
       <hr class="divider" />
       <div class="label">顶屏</div>

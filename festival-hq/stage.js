@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createSpatialFlow, spatialFlowGLSL } from "./spatial-flow.js";
 
 function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
   // From left audience-side wing, around the recessed stage back, to right wing.
@@ -41,6 +42,7 @@ function createCurvedScreenGeometry({ height = 10, segments = 200 } = {}) {
 }
 
 export function makeVenueGeometry(context) {
+  const spatialFlow = createSpatialFlow();
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(80, 70),
     new THREE.MeshStandardMaterial({ color: 0x0a0c0f, roughness: 0.86, metalness: 0.24 }),
@@ -104,14 +106,14 @@ export function makeVenueGeometry(context) {
   }
   const crownMaterial = new THREE.MeshBasicMaterial({ color: 0xffe7b2 });
   const crown = new THREE.Mesh(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(crownPoints), 200, 0.09, 6, false),
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(crownPoints), 200, 0.035, 6, false),
     crownMaterial,
   );
   mainScreen.add(crown);
 
   // Overhead LED is a permanent surface; the auxiliary floor control remains separate.
   const roofMaterial = new THREE.MeshBasicMaterial({ map: previewTexture, color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
-  // A separate material lets the ceiling fade without changing the triangle or orbital screens.
+  // A separate material lets the ceiling fade without changing the ice or orbital screens.
   const ceilingMaterial = roofMaterial.clone();
   const roofScreen = new THREE.Mesh(new THREE.PlaneGeometry(32, 8), ceilingMaterial);
   roofScreen.name = "FestivalOverheadLED";
@@ -119,72 +121,82 @@ export function makeVenueGeometry(context) {
   roofScreen.position.set(0, 11.4, -3);
   context.scene.add(roofScreen);
 
-  // Two LED ribbons form a tall triangular arch facing the audience (+Z).
-  // It remains a separate surface so it can show video without obscuring the stage.
-  const triangleGeometry = new THREE.BufferGeometry();
-  triangleGeometry.setAttribute("position", new THREE.Float32BufferAttribute([
-    -20, 0.9, 3.8,  -17.8, 0.9, 3.8,
-    0, 23.0, 3.8,    0, 20.4, 3.8,
-    20, 0.9, 3.8,    17.8, 0.9, 3.8,
-  ], 3));
-  triangleGeometry.setAttribute("uv", new THREE.Float32BufferAttribute([
-    0, 0, 0.06, 0, 0.5, 1, 0.5, 0.89, 1, 0, 0.94, 0,
-  ], 2));
-  triangleGeometry.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4]);
-  triangleGeometry.computeVertexNormals();
-  const triangleScreen = new THREE.Mesh(triangleGeometry, roofMaterial);
-  triangleScreen.name = "AudienceFacingTriangleLED";
-  context.scene.add(triangleScreen);
-
-  // The face remains video-mapped; this extruded backing gives the arch real depth.
-  const archShape = new THREE.Shape();
-  archShape.moveTo(-20, 0.9);
-  archShape.lineTo(0, 23);
-  archShape.lineTo(20, 0.9);
-  archShape.lineTo(17.8, 0.9);
-  archShape.lineTo(0, 20.4);
-  archShape.lineTo(-17.8, 0.9);
-  archShape.closePath();
-  const archBody = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(archShape, { depth: 0.7, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: 0x152c2a, metalness: 0.75, roughness: 0.32 }),
-  );
-  archBody.name = "TriangleLEDBacking";
-  archBody.position.z = 3.06;
-  context.scene.add(archBody);
-
-  // Bright cores and soft translucent halos outline both edges of the LED arch.
-  const lightCore = new THREE.MeshBasicMaterial({ color: 0xb5fff0, toneMapped: false });
-  const lightHalo = new THREE.MeshBasicMaterial({
-    color: 0x32f7c2, transparent: true, opacity: 0.17,
-    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  const lightCore = new THREE.MeshBasicMaterial({ color: 0xb5eaff, toneMapped: false });
+  const iceBodyMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x95bad0, metalness: 0.25, roughness: 0.28,
+    transparent: true, opacity: 0.62, clearcoat: 0.9, side: THREE.DoubleSide,
   });
-  const addStrip = (from, to) => {
-    const start = new THREE.Vector3(from[0], from[1], 3.87);
-    const end = new THREE.Vector3(to[0], to[1], 3.87);
-    const direction = end.clone().sub(start);
-    const length = direction.length();
-    const center = start.clone().add(end).multiplyScalar(0.5);
-    for (const [radius, material] of [[0.075, lightCore], [0.26, lightHalo]]) {
-      const strip = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 10), material);
-      strip.position.copy(center);
-      strip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
-      context.scene.add(strip);
-    }
-  };
-  const outline = [
-    [[-20, 0.9], [0, 23]], [[0, 23], [20, 0.9]],
-    [[-17.8, 0.9], [0, 20.4]], [[0, 20.4], [17.8, 0.9]],
-    [[-20, 0.9], [-17.8, 0.9]], [[17.8, 0.9], [20, 0.9]],
+  const iceFragments = new THREE.Group();
+  iceFragments.name = "FracturedIceArchitecture";
+  // Every polygon shares the stage UV canvas. Tall outer masses descend into
+  // smaller fragments at the apron; the central opening preserves the band.
+  const shards = [
+    { p: [[-23,1],[-22,13],[-19,17],[-17,10],[-19,2]], z: -0.8, d: 0.45 },
+    { p: [[-20,12],[-18.5,20],[-15,17.8],[-16.8,12.5]], z: -2.5, d: 0.4 },
+    { p: [[-17,13.5],[-14,19],[-9,21],[-11,16]], z: -4.8, d: 0.35 },
+    { p: [[-10,17],[-7.5,22],[-3.5,23],[-5,19]], z: -4, d: 0.3 },
+    { p: [[-3.8,20],[-1.5,23.6],[0.2,22.4],[-1,20.3]], z: -5.8, d: 0.28 },
+    { p: [[4.8,18.5],[5.6,22],[10,21],[12.8,16]], z: -4.5, d: 0.4 },
+    { p: [[12.8,15],[13.8,19.3],[18.2,18],[17,12]], z: -2.3, d: 0.5 },
+    { p: [[19,2],[17.8,11.5],[20.5,16],[23.5,12.8],[24,0.8]], z: 0.6, d: 0.55 },
+    { p: [[22.2,14.5],[24.1,18],[26,17],[24.8,13]], z: -2.5, d: 0.3 },
+    { p: [[-27,0.8],[-26,7.5],[-23.5,9],[-24,3]], z: 3.2, d: 0.45 },
+    { p: [[-24,0.9],[-21.2,5],[-19,3],[-19.5,1]], z: 5.5, d: 0.35 },
+    { p: [[20,1],[21.5,5.5],[24,7],[25.4,1]], z: 5, d: 0.4 },
+    { p: [[26.3,1],[27,5.4],[29,7],[28,2]], z: 2, d: 0.3 },
+    { p: [[-15.5,1],[-13.8,3.8],[-12.3,2.3],[-11.8,1]], z: 6.4, d: 0.25 },
+    { p: [[11,1],[12,2.9],[14,4],[15,1]], z: 6.6, d: 0.25 },
+    { p: [[-23,9.4],[-23.4,11.2],[-21.8,12],[-21,10.3]], z: 2, d: 0.22 },
+    { p: [[-12,11.8],[-10.3,15.8],[-8.8,14.2],[-9.7,12]], z: -0.5, d: 0.22 },
+    { p: [[9.3,11.5],[9.8,14.5],[11.5,15.8],[12.1,13]], z: 0.1, d: 0.25 },
   ];
-  for (const [from, to] of outline) addStrip(from, to);
-  const archLights = [];
-  for (const [x, y] of [[0, 22], [-18.8, 1.5], [18.8, 1.5]]) {
-    const glow = new THREE.PointLight(0x4effc8, 18, 12, 2);
-    glow.position.set(x, y, 5);
-    archLights.push(glow);
-    context.scene.add(glow);
+  for (const [index, { p: points, z, d }] of shards.entries()) {
+    const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
+    const body = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: false }), iceBodyMaterial);
+    body.position.z = z - d;
+    const faceGeometry = new THREE.ShapeGeometry(shape);
+    const pos = faceGeometry.getAttribute("position");
+    const uvs = [];
+    for (let i = 0; i < pos.count; i++) uvs.push((pos.getX(i) + 29) / 58, pos.getY(i) / 24);
+    faceGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    const face = new THREE.Mesh(faceGeometry, roofMaterial);
+    face.position.z = z + 0.015; face.name = `IceShardLED-${index + 1}`;
+
+    // Fine 2 cm luminous seams replace the broad triangular light rails.
+    const edgePoints = [...points, points[0]].map(([x, y]) => new THREE.Vector3(x, y, z + 0.045));
+    const edgePath = new THREE.CurvePath();
+    for (let j = 1; j < edgePoints.length; j++) edgePath.add(new THREE.LineCurve3(edgePoints[j - 1], edgePoints[j]));
+    const outline = new THREE.Mesh(new THREE.TubeGeometry(edgePath, points.length * 10, 0.022, 5, false), lightCore);
+
+    // A few internal fracture lines provide detail without filling the stage.
+    const [v0, v1, v2] = points;
+    const fracture = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(v0[0], v0[1], z + 0.04),
+      new THREE.Vector3((v0[0] + v2[0]) / 2, (v1[1] + v2[1]) / 2, z + 0.04),
+      new THREE.Vector3(v2[0], v2[1], z + 0.04),
+    ]), new THREE.LineBasicMaterial({ color: 0xc3e5f8, transparent: true, opacity: 0.28 }));
+    const fragment = new THREE.Group();
+    fragment.name = `IceFragment-${index + 1}`;
+    const cx = points.reduce((sum, p) => sum + p[0], 0) / points.length;
+    const cy = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+    fragment.position.set(cx, cy, z);
+    fragment.rotation.y = (index % 2 ? 1 : -1) * (0.06 + (index % 4) * 0.055);
+    fragment.rotation.x = (index % 3 - 1) * 0.06;
+    for (const object of [body, face, outline, fracture]) {
+      object.position.x -= cx; object.position.y -= cy; object.position.z -= z;
+      fragment.add(object);
+    }
+    iceFragments.add(fragment);
   }
+  context.scene.add(iceFragments);
+  const archLights = [];
+  for (const x of [-22, 23]) {
+    const glow = new THREE.PointLight(0x8ecaff, 12, 9, 2);
+    glow.position.set(x, 3, 3); archLights.push(glow); context.scene.add(glow);
+  }
+  spatialFlow.attach(mainMaterial);
+  spatialFlow.attach(roofMaterial, 0.2);
+  spatialFlow.attach(ceilingMaterial);
 
   // Hanging orbital screens: each narrow cylindrical LED ribbon has its own UVs,
   // while all ribbons and the sphere use the same material/texture transform.
@@ -207,7 +219,7 @@ export function makeVenueGeometry(context) {
     const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(4.25, 4.25, 0.38, 128, 1, true), roofMaterial);
     ring.add(ribbon);
     for (const edgeY of [-0.21, 0.21]) {
-      const edge = new THREE.Mesh(new THREE.TorusGeometry(4.25, 0.035, 8, 128), rimMaterial);
+      const edge = new THREE.Mesh(new THREE.TorusGeometry(4.25, 0.018, 8, 128), rimMaterial);
       edge.rotation.x = Math.PI / 2;
       edge.position.y = edgeY;
       ring.add(edge);
@@ -223,28 +235,39 @@ export function makeVenueGeometry(context) {
       image: { value: previewTexture },
       imageTransform: { value: previewTexture.matrix },
       screenTint: { value: new THREE.Color(0xffffff) },
-      opacity: { value: 0.42 },
+      opacity: { value: 0.54 },
+      haze: { value: 0.035 },
+      ...spatialFlow.uniforms,
       keyLevel: { value: 0.12 },
     },
     vertexShader: `
       varying vec2 screenUv;
+      varying vec3 stageWorldPosition;
       uniform mat3 imageTransform;
       void main() {
         screenUv = (imageTransform * vec3(uv, 1.0)).xy;
+        stageWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
-    fragmentShader: `
+    fragmentShader: `${spatialFlowGLSL}
+      uniform float haze;
+      uniform mat3 imageTransform;
       uniform sampler2D image;
       uniform float opacity;
       uniform vec3 screenTint;
       uniform float keyLevel;
       varying vec2 screenUv;
       void main() {
-        vec4 sampleColor = texture2D(image, screenUv);
-        float brightness = max(max(sampleColor.r, sampleColor.g), sampleColor.b);
-        float alpha = smoothstep(keyLevel, keyLevel + 0.12, brightness) * opacity * sampleColor.a;
-        gl_FragColor = vec4(sampleColor.rgb * screenTint, alpha);
+        vec2 sharedUv = (imageTransform * vec3(stagePanoramaUv(stageWorldPosition), 1.0)).xy;
+        vec4 sampleColor = texture2D(image, flowEnabled > 0.5 ? sharedUv : screenUv);
+        vec4 flow = stageFlow(stageWorldPosition);
+        vec3 imageColor = sampleColor.rgb * screenTint * mix(1.0, 0.55, flowEnabled);
+        imageColor += flow.rgb * flow.a;
+        float brightness = max(max(imageColor.r, imageColor.g), imageColor.b);
+        float alpha = smoothstep(keyLevel, keyLevel + 0.12, brightness) * opacity;
+        float veil = haze * (0.8 + 0.2 * sin(stageWorldPosition.x * 70.0) * sin(stageWorldPosition.y * 95.0));
+        gl_FragColor = vec4(imageColor + vec3(0.16, 0.23, 0.27) * veil, max(alpha, veil));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -253,25 +276,29 @@ export function makeVenueGeometry(context) {
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  // Match the inner vertices of the luminous triangular arch exactly.
+  // A gently faceted wrap follows the apron, with a fractured upper edge.
   const scrimGeometry = new THREE.BufferGeometry();
-  scrimGeometry.setAttribute("position", new THREE.Float32BufferAttribute([
-    -17.8, 0.9, 0,
-     17.8, 0.9, 0,
-     0, 20.4, 0,
-  ], 3));
-  // The image remains in a rectangular UV space, clipped by the triangular outline.
-  scrimGeometry.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0.5, 1], 2));
-  scrimGeometry.setIndex([0, 1, 2]);
-  scrimGeometry.computeVertexNormals();
+  const scrimPositions = [], scrimUvs = [], scrimIndices = [];
+  const scrimSegments = 80;
+  for (let i = 0; i <= scrimSegments; i++) {
+    const u = i / scrimSegments, x = (u - 0.5) * 34;
+    const z = 1.7 * (1 - (x / 17) ** 2);
+    const top = 9.7 + 0.9 * Math.sin(u * Math.PI * 3 + 0.2) + 0.35 * Math.sin(u * Math.PI * 9);
+    scrimPositions.push(x, 1.0, z, x, top, z);
+    scrimUvs.push(u, 0, u, 1);
+    if (i < scrimSegments) { const a = i * 2; scrimIndices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  }
+  scrimGeometry.setAttribute("position", new THREE.Float32BufferAttribute(scrimPositions, 3));
+  scrimGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(scrimUvs, 2));
+  scrimGeometry.setIndex(scrimIndices); scrimGeometry.computeVertexNormals();
   const foregroundScreen = new THREE.Mesh(scrimGeometry, foregroundMaterial);
   foregroundScreen.name = "TransparentForegroundScreen";
   foregroundScreen.position.z = 3.81;
   foregroundScreen.renderOrder = 4;
   context.scene.add(foregroundScreen);
   const scrimFrame = new THREE.LineSegments(
-    new THREE.EdgesGeometry(scrimGeometry),
-    new THREE.LineBasicMaterial({ color: 0x70b5a4, transparent: true, opacity: 0.22, depthWrite: false }),
+    new THREE.EdgesGeometry(scrimGeometry, 30),
+    new THREE.LineBasicMaterial({ color: 0xa8d3e7, transparent: true, opacity: 0.09, depthWrite: false }),
   );
   foregroundScreen.add(scrimFrame);
 
@@ -359,8 +386,8 @@ export function makeVenueGeometry(context) {
 
   // Five simplified 1.7 m scale references: two guitars, keys, bass and drums.
   // They remain behind the transparent scrim and can be replaced with models later.
-  const outfit = new THREE.MeshStandardMaterial({ color: 0x52636a, roughness: 0.68, metalness: 0.1 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0xe3bda4, roughness: 0.8 });
+  const outfit = new THREE.MeshStandardMaterial({ color: 0x82929e, roughness: 0.78, metalness: 0.05, emissive: 0x18242c, emissiveIntensity: 0.45 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xe3bda4, roughness: 0.8, emissive: 0x3a2820, emissiveIntensity: 0.2 });
   const instrumentDark = new THREE.MeshStandardMaterial({ color: 0x151d24, roughness: 0.45, metalness: 0.35 });
   const hardware = new THREE.MeshStandardMaterial({ color: 0xa9c5bf, roughness: 0.28, metalness: 0.8 });
   const cymbalMaterial = new THREE.MeshStandardMaterial({ color: 0xd7ad63, metalness: 0.75, roughness: 0.27 });
@@ -468,10 +495,15 @@ export function makeVenueGeometry(context) {
     light.target.position.set(...targetPosition);
     context.scene.add(light, light.target);
   };
-  for (const x of [-5, 0, 5]) {
-    addPerformerWash([x, 7, 3.2], [x, 1.7, -0.8], 125, 0.52);
+  for (const x of [-6.4, -2.5, 3.0, 6.4]) {
+    addPerformerWash([x - 0.7, 5.7, 3.1], [x, 1.8, -0.7], 160, 0.38);
   }
-  addPerformerWash([0, 6.4, -2], [0, 2.0, -5.2], 90, 0.48);
+  addPerformerWash([0, 5.4, -2], [0, 2.1, -5.2], 140, 0.5);
+  for (const x of [-5, 5]) {
+    const rim = new THREE.SpotLight(0xc4e8ff, 130, 17, 0.6, 0.9, 2);
+    rim.position.set(x, 5.7, -7.8); rim.target.position.set(x * 0.7, 1.8, -0.6);
+    context.scene.add(rim, rim.target);
+  }
 
   const rigMaterial = new THREE.MeshStandardMaterial({ color: 0x20272b, metalness: 0.7, roughness: 0.4 });
   const frame = (w, h, d, x, y, z) => {
@@ -560,15 +592,17 @@ export function makeVenueGeometry(context) {
     depthWrite: false,
     toneMapped: false,
   });
-  const beamCoreMaterial = makeBeamMaterial(0.48);
-  const beamHazeMaterial = makeBeamMaterial(0.16);
-  const beamGlowMaterial = makeBeamMaterial(0.085);
+  const beamCoreMaterial = makeBeamMaterial(0.3);
+  const beamHazeMaterial = makeBeamMaterial(0.12);
+  const beamGlowMaterial = makeBeamMaterial(0.04);
   const beamCoreGeometry = new THREE.CylinderGeometry(0.065, 0.065, 9.7, 20, 1, true);
   const beamHazeGeometry = new THREE.CylinderGeometry(0.24, 0.24, 9.7, 24, 1, true);
   const beamGlowGeometry = new THREE.CylinderGeometry(0.65, 0.65, 9.7, 32, 1, true);
-  for (let i = -4; i <= 4; i += 1) {
-    const top = new THREE.Vector3(i * 2.9, 10.8, 1.1);
-    const bottom = new THREE.Vector3(i * 3.25, 1.1, 1.1);
+  const backBeamX = [-13.5, -9.4, -4.5, 0.7, 5.2, 10.4, 14.5];
+  for (const [i, x] of backBeamX.entries()) {
+    const top = new THREE.Vector3(x, 10.5 + Math.sin(i * 1.8) * 0.7, -6.8 + (i % 3) * 0.8);
+    const bottom = new THREE.Vector3(x * 1.08, 1.0, 4.6 + (i % 3) * 1.2);
+    const lens = new THREE.Mesh(lensGeometry, coolLens); lens.position.copy(top); context.scene.add(lens);
     const direction = top.clone().sub(bottom);
     const length = direction.length();
     const midpoint = top.clone().add(bottom).multiplyScalar(0.5);
@@ -598,7 +632,8 @@ export function makeVenueGeometry(context) {
 
   const setStagePalette = (colors) => {
     lightCore.color.set(colors.primary);
-    lightHalo.color.set(colors.halo);
+    iceBodyMaterial.color.set(colors.primary).lerp(new THREE.Color(0x91b8ce), 0.6);
+    spatialFlow.uniforms.flowColor.value.set(colors.primary).lerp(new THREE.Color(0xffffff), 0.65);
     rimMaterial.color.set(colors.primary);
     crownMaterial.color.set(colors.accent);
     coolLens.color.set(colors.primary);
@@ -614,6 +649,7 @@ export function makeVenueGeometry(context) {
 
   return {
     setStagePalette,
+    spatialFlow,
     mainScreen,
     mainMaterial,
     roofMaterial,
